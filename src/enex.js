@@ -2,7 +2,7 @@
 // ENML is XHTML with a few Evernote-only tags; we rewrite it into HTML Tiptap understands.
 import SparkMD5 from 'spark-md5';
 import { isValidYoutubeUrl } from '@tiptap/extension-youtube';
-import { uid, getAllNotes, putNote, getAllNotebooks, putNotebook } from './db.js';
+import { uid, getAllNotes, putNote, getAllNotebooks, putNotebook, deleteAttachment } from './db.js';
 import { storeBlob } from './attachments.js';
 
 const BLOCK = new Set(['DIV', 'P', 'UL', 'OL', 'LI', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH',
@@ -184,56 +184,170 @@ async function readResources(noteEl) {
   return media;
 }
 
-// onProgress(done, total) is called after each note.
-export async function importEnex(file, onProgress = () => {}) {
-  const xml = new DOMParser().parseFromString(await file.text(), 'application/xml');
-  if (xml.querySelector('parsererror') || !xml.querySelector('en-export')) {
-    throw new Error(`${file.name} はEvernoteの書き出しファイルとして読めませんでした`);
+// Evernote "tasks" (not checkboxes) live outside the note body as <task> elements; the body
+// only has a read-only placeholder <div style="--en-task-group:true; --en-id:GROUP">.
+function readTasks(noteEl) {
+  const groups = new Map();
+  for (const t of noteEl.querySelectorAll(':scope > task')) {
+    const get = tag => t.querySelector(`:scope > ${tag}`)?.textContent || '';
+    const group = get('taskGroupNoteLevelID');
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push({
+      title: get('title').trim(),
+      done: get('taskStatus') === 'completed',
+      due: get('dueDate') ? localDay(parseTime(get('dueDate')), get('timeZone')) : null,
+      sort: get('sortWeight'),
+    });
   }
+  for (const list of groups.values()) list.sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0));
+  return groups;
+}
 
+// Due dates are stored as UTC instants; the day that matters is the one in the task's time zone.
+function localDay(ms, timeZone) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: timeZone || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms);
+  } catch {
+    return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms);
+  }
+}
+
+function replaceTaskGroups(root, groups) {
+  const doc = root.ownerDocument;
+  for (const div of [...root.querySelectorAll('div')].filter(d => enStyle(d, 'task-group') === 'true')) {
+    const tasks = groups.get(enStyle(div, 'id')) || [];
+    if (!tasks.length) { div.remove(); continue; }
+    const ul = doc.createElement('ul');
+    ul.setAttribute('data-type', 'taskList');
+    for (const t of tasks) {
+      const li = doc.createElement('li');
+      li.setAttribute('data-type', 'taskItem');
+      li.setAttribute('data-checked', String(t.done));
+      if (t.due) li.setAttribute('data-due', t.due);
+      const p = doc.createElement('p');
+      p.textContent = t.title;
+      li.append(p);
+      ul.append(li);
+    }
+    div.replaceWith(ul);
+  }
+}
+
+// Reads the file in chunks and yields one <note> element at a time. Some exports are
+// close to 1 GB, more than a browser can hold as a single string. Each chunk is scanned
+// once; a note's pieces are only joined when its closing tag arrives.
+async function* streamNotes(file, onBytes) {
+  const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let read = 0, checked = false, inNote = false, parts = [], carry = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    read += value.length;
+    onBytes(read);
+    if (!checked) {
+      checked = true;
+      if (!value.slice(0, 4096).includes('<en-export')) {
+        reader.cancel();
+        throw new Error(`${file.name} はEvernoteの書き出しファイルとして読めませんでした`);
+      }
+    }
+    let rest = carry + value;
+    carry = '';
+    while (rest) {
+      if (!inNote) {
+        const i = rest.indexOf('<note>');
+        if (i < 0) { carry = rest.slice(-6); break; }
+        inNote = true;
+        parts = [];
+        rest = rest.slice(i);
+      }
+      const j = rest.indexOf('</note>');
+      if (j < 0) { parts.push(rest.slice(0, -6)); carry = rest.slice(-6); break; } // tag may straddle chunks
+      parts.push(rest.slice(0, j + 7));
+      rest = rest.slice(j + 7);
+      inNote = false;
+      const text = parts.join('');
+      parts = [];
+      yield parseNote(text);
+    }
+  }
+}
+
+// Evernote sometimes writes a bare "&" (seen in its auto-generated image captions), which is
+// invalid XML. Retry once with those escaped; if the note still won't parse, report it.
+const BARE_AMP = /&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g;
+
+function parseNote(text) {
+  const parse = t => {
+    const doc = new DOMParser().parseFromString(t, 'application/xml');
+    return doc.querySelector('parsererror') ? null : doc.documentElement;
+  };
+  const el = parse(text) || parse(text.replace(BARE_AMP, '&amp;'));
+  if (el) return { el };
+  const title = text.slice(0, 2000).match(/<title>([\s\S]*?)<\/title>/)?.[1] || '(タイトル不明)';
+  return { failed: title };
+}
+
+function convertNote(el, media) {
+  // The HTML parser ignores "/>" on unknown tags, which would swallow everything after
+  // an <en-media/> into it. Close them explicitly first.
+  const enml = (el.querySelector(':scope > content')?.textContent || '')
+    .replace(/<(en-media|en-todo)\b([^>]*?)\s*\/>/g, '<$1$2></$1>');
+  const parsed = new DOMParser().parseFromString(enml, 'text/html');
+  const body = parsed.querySelector('en-note') || parsed.body;
+  replaceTaskGroups(body, readTasks(el));
+  convertBody(body, media);
+  return body.innerHTML;
+}
+
+// onProgress(notesDone, fraction of the file read)
+export async function importEnex(file, onProgress = () => {}) {
   const name = file.name.replace(/\.enex$/i, '') || 'Evernote';
   let notebook = (await getAllNotebooks()).find(nb => nb.name === name);
-  if (!notebook) {
-    notebook = { id: uid(), name, createdAt: Date.now() };
-    await putNotebook(notebook);
-  }
+  const ensureNotebook = async () => {
+    if (!notebook) {
+      notebook = { id: uid(), name, pinned: false, createdAt: Date.now() };
+      await putNotebook(notebook);
+    }
+    return notebook.id;
+  };
 
-  // Same title + created time = same Evernote note, so re-importing a file is harmless.
-  const seen = new Set((await getAllNotes()).map(n => n.sourceKey).filter(Boolean));
-  const noteEls = [...xml.querySelectorAll('en-export > note')];
-  let added = 0, skipped = 0;
+  // Same title + created time = same Evernote note. A note already imported is only
+  // replaced if it was never edited in techo (its updatedAt is still Evernote's).
+  const existing = new Map((await getAllNotes()).filter(n => n.sourceKey).map(n => [n.sourceKey, n]));
+  let added = 0, updated = 0, skipped = 0, fraction = 0;
+  const failed = [];
 
-  for (const [i, el] of noteEls.entries()) {
+  for await (const { el, failed: bad } of streamNotes(file, bytes => { fraction = Math.min(1, bytes / file.size); })) {
+    if (!el) { failed.push(bad); continue; }
     const title = el.querySelector(':scope > title')?.textContent.trim() || '';
     const created = parseTime(el.querySelector(':scope > created')?.textContent);
+    const changed = parseTime(el.querySelector(':scope > updated')?.textContent) || created;
     const sourceKey = `enex:${created}:${title}`;
-    if (seen.has(sourceKey)) { skipped++; onProgress(i + 1, noteEls.length); continue; }
+    const prev = existing.get(sourceKey);
+    if (prev && prev.updatedAt !== changed) { skipped++; onProgress(added + updated + skipped, fraction); continue; }
 
     const media = await readResources(el);
-    // The HTML parser ignores "/>" on unknown tags, which would swallow everything after
-    // an <en-media/> into it. Close them explicitly first.
-    const enml = (el.querySelector(':scope > content')?.textContent || '')
-      .replace(/<(en-media|en-todo)\b([^>]*?)\s*\/>/g, '<$1$2></$1>');
-    const parsed = new DOMParser().parseFromString(enml, 'text/html');
-    const body = parsed.querySelector('en-note') || parsed.body;
-    convertBody(body, media);
-    const html = body.innerHTML;
-
-    await putNote({
-      id: uid(),
+    const html = convertNote(el, media);
+    if (prev) {
+      for (const m of (prev.html || '').matchAll(/att:([a-z0-9]+)/g)) await deleteAttachment(m[1]);
+    }
+    const note = {
+      id: prev?.id || uid(),
       title,
       html,
       text: htmlToText(html),
-      notebookId: notebook.id,
-      pinned: false,
+      notebookId: prev?.notebookId || await ensureNotebook(),
+      pinned: prev?.pinned || false,
       tags: [...el.querySelectorAll(':scope > tag')].map(t => t.textContent),
       sourceKey,
       createdAt: created,
-      updatedAt: parseTime(el.querySelector(':scope > updated')?.textContent) || created,
-    });
-    seen.add(sourceKey);
-    added++;
-    onProgress(i + 1, noteEls.length);
+      updatedAt: changed,
+    };
+    await putNote(note);
+    existing.set(sourceKey, note);
+    if (prev) updated++; else added++;
+    onProgress(added + updated + skipped, fraction);
   }
-  return { notebook: notebook.name, added, skipped };
+  return { notebook: name, added, updated, skipped, failed };
 }

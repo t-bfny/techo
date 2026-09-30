@@ -838,8 +838,8 @@ $('enexInput').onchange = async e => {
   const results = [];
   try {
     for (const [fi, file] of files.entries()) {
-      results.push(await importEnex(file, (done, total) => {
-        btn.textContent = `取り込み中 ${fi + 1}/${files.length}: ${done}/${total}`;
+      results.push(await importEnex(file, (done, fraction) => {
+        btn.textContent = `取り込み中 ${fi + 1}/${files.length}ファイル目 ${done}件 (${Math.round(fraction * 100)}%)`;
       }));
     }
   } catch (err) {
@@ -852,7 +852,12 @@ $('enexInput').onchange = async e => {
   notebooks = await getAllNotebooks();
   renderAll();
   if (results.length) {
-    alert(results.map(r => `${r.notebook}: ${r.added}件を追加` + (r.skipped ? `(取り込み済み${r.skipped}件はスキップ)` : '')).join('\n'));
+    alert(results.map(r => [
+      `${r.notebook}: ${r.added}件を追加`,
+      r.updated && `${r.updated}件を取り込み直し`,
+      r.skipped && `techoで編集済みの${r.skipped}件はそのまま`,
+      r.failed.length && `読めなかった${r.failed.length}件: ${r.failed.join(' / ')}`,
+    ].filter(Boolean).join('、')).join('\n'));
   }
 };
 
