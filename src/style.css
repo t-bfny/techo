@@ -93,6 +93,9 @@ button.mini { font-size: 12px; padding: 2px 8px; border-radius: 6px; }
 button.on { background: var(--accent); color: var(--bg); border-color: transparent; }
 
 input, select { font: inherit; color: var(--text); }
+/* The open dropdown list is drawn by the OS; without explicit colors Windows shows it white. */
+option, optgroup { background-color: var(--panel); color: var(--text); }
+option:checked { background-color: var(--panel-2); }
 select {
   font-size: 14px;
   background: var(--panel-2);
