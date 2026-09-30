@@ -11,47 +11,98 @@
 </head>
 <body>
   <div id="app">
-    <aside id="listPane">
-      <header class="bar">
-        <input id="search" type="search" placeholder="検索" autocomplete="off">
-        <button id="newBtn">新規</button>
-      </header>
-      <ul id="noteList"></ul>
+    <nav id="sidebar">
+      <div class="side-top">
+        <button id="newBtn" class="primary">新規ノート</button>
+      </div>
+      <div class="side-scroll">
+        <button class="side-item" data-filter="all"><span>すべてのノート</span><span class="n" id="countAll"></span></button>
+        <button class="side-head link" data-filter="shortcuts"><span>ショートカット</span></button>
+        <div id="shortcutList"></div>
+        <div class="side-head"><span>ノートブック</span><button id="addNotebookBtn" class="mini" title="ノートブックを追加">+</button></div>
+        <div id="notebookList"></div>
+      </div>
       <footer class="bar small">
-        <span id="count"></span>
-        <span class="grow"></span>
         <button id="exportBtn">書き出し</button>
         <button id="importBtn">読み込み</button>
         <input id="importInput" type="file" accept="application/json" hidden>
       </footer>
+    </nav>
+    <div id="scrim" hidden></div>
+
+    <aside id="listPane">
+      <header class="bar">
+        <button id="menuBtn" class="drawer-only">メニュー</button>
+        <strong id="filterName" class="ellipsis"></strong>
+        <span id="count" class="dim"></span>
+        <span class="grow"></span>
+        <span id="notebookTools" hidden>
+          <button id="renameNotebookBtn" class="mini">名前変更</button>
+          <button id="deleteNotebookBtn" class="mini danger">削除</button>
+        </span>
+      </header>
+      <div class="search-row">
+        <input id="search" type="search" placeholder="検索" autocomplete="off">
+      </div>
+      <ul id="noteList"></ul>
     </aside>
 
     <main id="editorPane">
+      <div id="tabs"><div id="tabList"></div><button id="newTabBtn" class="tab-add" title="新しいノートをタブで開く">+</button></div>
       <p id="emptyState">メモを選ぶか、新規で作成</p>
       <div id="editorWrap" hidden>
-        <header class="bar">
+        <header class="bar crumbs">
           <button id="backBtn" class="narrow-only">一覧</button>
+          <select id="nbSelect" title="ノートブックを移動"></select>
+          <span class="sep">›</span>
+          <span id="crumbTitle" class="ellipsis"></span>
           <span class="grow"></span>
+          <button id="pinBtn" class="wide-only">ショートカット</button>
+          <button id="stageBtn">本番</button>
+          <button id="deleteBtn" class="danger wide-only">削除</button>
+          <button id="moreBtn" class="narrow-only" data-pop="more">その他</button>
+        </header>
+        <div id="toolbar" class="bar">
+          <button data-pop="insert" class="strong">挿入</button>
+          <span class="vr"></span>
+          <button data-cmd="undo" title="元に戻す">↶</button>
+          <button data-cmd="redo" title="やり直し">↷</button>
+          <span class="vr"></span>
+          <select id="blockSelect" title="段落の種類">
+            <option value="p">本文</option>
+            <option value="1">見出し1</option>
+            <option value="2">見出し2</option>
+            <option value="3">見出し3</option>
+          </select>
+          <span class="vr"></span>
+          <button data-cmd="bold" title="太字 (Ctrl+B)"><b>B</b></button>
+          <button data-cmd="italic" title="斜体 (Ctrl+I)"><i>I</i></button>
+          <button data-cmd="underline" title="下線 (Ctrl+U)"><u>U</u></button>
+          <button data-cmd="strike" title="取り消し線"><s>S</s></button>
+          <button data-pop="color" title="文字色"><span class="swatch-a" id="colorMark">A</span></button>
+          <button data-pop="highlight" title="ハイライト"><span class="swatch-h" id="hlMark">A</span></button>
+          <span class="vr"></span>
+          <button data-cmd="bulletList" title="箇条書き">• 箇条</button>
+          <button data-cmd="orderedList" title="番号付き">1. 番号</button>
+          <button data-cmd="taskList" title="チェックリスト">☐ チェック</button>
           <span id="tableTools" hidden>
+            <span class="vr"></span>
             <button data-table="addRowAfter">行+</button>
             <button data-table="addColumnAfter">列+</button>
             <button data-table="deleteRow">行-</button>
             <button data-table="deleteColumn">列-</button>
           </span>
-          <button id="imageBtn">画像</button>
-          <input id="imageInput" type="file" accept="image/*" multiple hidden>
-          <button id="tableBtn">表</button>
-          <button id="ytBtn">動画</button>
-          <button id="stageBtn">本番</button>
-          <button id="deleteBtn" class="danger">削除</button>
-        </header>
-        <div class="scroll">
+        </div>
+        <div class="scroll" id="editorScroll">
           <input id="titleInput" placeholder="タイトル" autocomplete="off">
           <div id="editor"></div>
         </div>
       </div>
+      <input id="imageInput" type="file" accept="image/*" multiple hidden>
     </main>
   </div>
+
+  <div id="popover" hidden></div>
 
   <section id="stage" hidden>
     <header class="bar">

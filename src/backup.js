@@ -1,5 +1,5 @@
 // Until sync exists, data lives only in this browser. Export/import is the safety net.
-import { getAllNotes, getAllAttachments, getNote, putNote, putAttachment } from './db.js';
+import { getAllNotes, getAllAttachments, getAllNotebooks, getNote, putNote, putAttachment, putNotebook } from './db.js';
 
 const toDataUrl = blob => new Promise(r => {
   const fr = new FileReader();
@@ -9,11 +9,12 @@ const toDataUrl = blob => new Promise(r => {
 
 export async function exportAll() {
   const notes = await getAllNotes();
+  const notebooks = await getAllNotebooks();
   const atts = await getAllAttachments();
   const attachments = await Promise.all(atts.map(async a => ({
     id: a.id, type: a.type, createdAt: a.createdAt, data: await toDataUrl(a.blob),
   })));
-  const json = JSON.stringify({ app: 'techo', version: 1, exportedAt: Date.now(), notes, attachments });
+  const json = JSON.stringify({ app: 'techo', version: 1, exportedAt: Date.now(), notebooks, notes, attachments });
   const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
   const a = document.createElement('a');
   a.href = url;
@@ -26,6 +27,10 @@ export async function exportAll() {
 export async function importFile(file) {
   const data = JSON.parse(await file.text());
   if (data.app !== 'techo') throw new Error('techoのバックアップではありません');
+  const existing = new Set((await getAllNotebooks()).map(nb => nb.id));
+  for (const nb of data.notebooks || []) {
+    if (!existing.has(nb.id)) await putNotebook(nb);
+  }
   for (const a of data.attachments || []) {
     const blob = await (await fetch(a.data)).blob();
     await putAttachment({ id: a.id, blob, type: a.type, createdAt: a.createdAt });

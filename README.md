@@ -11,7 +11,7 @@ npm run build    # dist/ に本番ビルド
 npm run preview  # ビルド結果の確認
 ```
 
-## 今できること (v0.1)
+## 今できること (v0.2)
 
 - メモの作成・編集・自動保存(端末内のIndexedDB)
 - 全文検索(スペース区切りでAND)
@@ -19,14 +19,18 @@ npm run preview  # ビルド結果の確認
 - リンク自動化(日本語の直後のURLも可)
 - YouTube URLを貼ると埋め込み(youtu.be の共有リンクも可)
 - 表(表の中にいる間だけ 行+/列+/行-/列- が出る)
+- 書式ツールバー: 挿入メニュー、元に戻す/やり直し、見出し、太字/斜体/下線/取り消し線、文字色、ハイライト、箇条書き/番号/チェックリスト
+- ノートブック(件数つき)、ショートカット(ピン留め)、パンくずからノートブック移動
+- タブ: クリックで今のタブを置き換え、Ctrl+クリック/中クリックで新しいタブ(PCのみ)
 - 本番モード: 読み取り専用、大きい文字(A-/A+)、画面が消えない
 - 書き出し/読み込み(JSONバックアップ。新しい方が勝つ)
 - オフライン動作(Service Worker)
-- 幅760px以下は1画面、それ以上は一覧+本文の2画面
+- 幅1100px以上は サイドバー|一覧|本文、それ未満はサイドバーを引き出し式に。760px以下は1画面ずつ
 
 ## データの形
 
-- `notes`: `{id, title, html, text, createdAt, updatedAt}`
+- `notes`: `{id, title, html, text, notebookId, pinned, createdAt, updatedAt}`
+- `notebooks`: `{id, name, createdAt}`
 - `attachments`: `{id, blob, type, createdAt}`。本文HTMLでは `att:ID` として参照する
 
 ## この先

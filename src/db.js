@@ -1,8 +1,10 @@
-// IndexedDB wrapper. notes: {id, title, html, text, createdAt, updatedAt}
+// IndexedDB wrapper.
+// notes: {id, title, html, text, notebookId, pinned, createdAt, updatedAt}
+// notebooks: {id, name, createdAt}
 // attachments: {id, blob, type, createdAt}  (html references them as att:ID)
 
 const DB_NAME = 'techo';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let dbPromise;
 
 function open() {
@@ -16,6 +18,9 @@ function open() {
       }
       if (!db.objectStoreNames.contains('attachments')) {
         db.createObjectStore('attachments', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('notebooks')) {
+        db.createObjectStore('notebooks', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -40,7 +45,11 @@ export const getNote = id => tx('notes', 'readonly', s => s.get(id));
 export const putNote = note => tx('notes', 'readwrite', s => s.put(note));
 export const deleteNote = id => tx('notes', 'readwrite', s => s.delete(id));
 
-export const getAttachment = id => tx('attachments', 'readonly', s => s.get(id));
+export const getAllNotebooks = () => tx('notebooks', 'readonly', s => s.getAll());
+export const putNotebook = nb => tx('notebooks', 'readwrite', s => s.put(nb));
+export const deleteNotebook = id => tx('notebooks', 'readwrite', s => s.delete(id));
+
+export const getAttachment =id => tx('attachments', 'readonly', s => s.get(id));
 export const getAllAttachments = () => tx('attachments', 'readonly', s => s.getAll());
 export const putAttachment = att => tx('attachments', 'readwrite', s => s.put(att));
 export const deleteAttachment = id => tx('attachments', 'readwrite', s => s.delete(id));
