@@ -212,25 +212,53 @@ function localDay(ms, timeZone) {
   }
 }
 
-function replaceTaskGroups(root, groups) {
-  const doc = root.ownerDocument;
-  for (const div of [...root.querySelectorAll('div')].filter(d => enStyle(d, 'task-group') === 'true')) {
-    const tasks = groups.get(enStyle(div, 'id')) || [];
-    if (!tasks.length) { div.remove(); continue; }
-    const ul = doc.createElement('ul');
-    ul.setAttribute('data-type', 'taskList');
-    for (const t of tasks) {
-      const li = doc.createElement('li');
-      li.setAttribute('data-type', 'taskItem');
-      li.setAttribute('data-checked', String(t.done));
-      if (t.due) li.setAttribute('data-due', t.due);
-      const p = doc.createElement('p');
-      p.textContent = t.title;
-      li.append(p);
-      ul.append(li);
-    }
-    div.replaceWith(ul);
+function taskListEl(doc, tasks) {
+  const ul = doc.createElement('ul');
+  ul.setAttribute('data-type', 'taskList');
+  for (const t of tasks) {
+    const li = doc.createElement('li');
+    li.setAttribute('data-type', 'taskItem');
+    li.setAttribute('data-checked', String(t.done));
+    if (t.due) li.setAttribute('data-due', t.due);
+    const p = doc.createElement('p');
+    p.textContent = t.title;
+    li.append(p);
+    ul.append(li);
   }
+  return ul;
+}
+
+const taskGroupDivs = root => [...root.querySelectorAll('div')].filter(d => enStyle(d, 'task-group') === 'true');
+
+function replaceTaskGroups(root, groups) {
+  for (const div of taskGroupDivs(root)) {
+    const tasks = groups.get(enStyle(div, 'id')) || [];
+    if (tasks.length) div.replaceWith(taskListEl(root.ownerDocument, tasks)); else div.remove();
+  }
+}
+
+// Text an older techo left where Evernote's task placeholder was converted as plain paragraphs.
+export const PLACEHOLDER = 'サポートされていないコンテンツです';
+const PLACEHOLDER_DETAIL = 'タスク機能のためのプレースホルダ';
+
+// For a note already edited in techo: swap only the leftover placeholder paragraphs for the
+// real tasks (in the same order they appear in Evernote), keeping every other edit.
+function repairPlaceholders(html, el) {
+  const enml = (el.querySelector(':scope > content')?.textContent || '')
+    .replace(/<(en-media|en-todo)\b([^>]*?)\s*\/>/g, '<$1$2></$1>');
+  const src = new DOMParser().parseFromString(enml, 'text/html');
+  const groups = readTasks(el);
+  const lists = taskGroupDivs(src).map(div => groups.get(enStyle(div, 'id')) || []);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const marks = [...doc.body.querySelectorAll('p')].filter(p => p.textContent.includes(PLACEHOLDER));
+  if (!marks.length) return null;
+  marks.forEach((p, i) => {
+    const next = p.nextElementSibling;
+    if (next?.textContent.includes(PLACEHOLDER_DETAIL)) next.remove();
+    const tasks = lists[i] || [];
+    if (tasks.length) p.replaceWith(taskListEl(doc, tasks)); else p.remove();
+  });
+  return doc.body.innerHTML;
 }
 
 // Reads the file in chunks and yields one <note> element at a time. Some exports are
@@ -315,7 +343,7 @@ export async function importEnex(file, onProgress = () => {}) {
   // Same title + created time = same Evernote note. A note already imported is only
   // replaced if it was never edited in techo (its updatedAt is still Evernote's).
   const existing = new Map((await getAllNotes()).filter(n => n.sourceKey).map(n => [n.sourceKey, n]));
-  let added = 0, updated = 0, skipped = 0, fraction = 0;
+  let added = 0, updated = 0, repaired = 0, skipped = 0, fraction = 0;
   const failed = [];
 
   for await (const { el, failed: bad } of streamNotes(file, bytes => { fraction = Math.min(1, bytes / file.size); })) {
@@ -325,8 +353,22 @@ export async function importEnex(file, onProgress = () => {}) {
     const changed = parseTime(el.querySelector(':scope > updated')?.textContent) || created;
     const sourceKey = `enex:${created}:${title}`;
     const prev = existing.get(sourceKey);
-    // Leave notes alone that were edited in techo or are sitting in the trash.
-    if (prev && (prev.updatedAt !== changed || prev.deletedAt)) { skipped++; onProgress(added + updated + skipped, fraction); continue; }
+    // Leave notes alone that were edited in techo or are sitting in the trash, except for
+    // filling in Evernote tasks an older version left as "unsupported" placeholders.
+    if (prev && (prev.updatedAt !== changed || prev.deletedAt)) {
+      const fixed = !prev.deletedAt && prev.html?.includes(PLACEHOLDER) && repairPlaceholders(prev.html, el);
+      if (fixed) {
+        prev.html = fixed;
+        prev.text = htmlToText(fixed);
+        prev.updatedAt = Date.now();
+        await putNote(prev);
+        repaired++;
+      } else {
+        skipped++;
+      }
+      onProgress(added + updated + repaired + skipped, fraction);
+      continue;
+    }
 
     const media = await readResources(el);
     const html = convertNote(el, media);
@@ -348,7 +390,7 @@ export async function importEnex(file, onProgress = () => {}) {
     await putNote(note);
     existing.set(sourceKey, note);
     if (prev) updated++; else added++;
-    onProgress(added + updated + skipped, fraction);
+    onProgress(added + updated + repaired + skipped, fraction);
   }
-  return { notebook: name, added, updated, skipped, failed };
+  return { notebook: name, added, updated, repaired, skipped, failed };
 }

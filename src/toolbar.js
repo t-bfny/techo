@@ -45,6 +45,23 @@ export function showPopover(button, build) {
   openFor = button;
 }
 
+// Right-click menus: same popover, placed at the pointer and kept inside the window.
+export function showMenuAt(x, y, build) {
+  const pop = $('popover');
+  pop.replaceChildren();
+  pop.classList.remove('swatches');
+  build(pop);
+  pop.hidden = false;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+  pop.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`;
+  openFor = null;
+}
+
+export function menuSep() {
+  return Object.assign(document.createElement('div'), { className: 'menu-sep' });
+}
+
 export function menuItem(label, onClick) {
   const b = document.createElement('button');
   b.className = 'menu-item';

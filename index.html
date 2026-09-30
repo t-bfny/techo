@@ -7,6 +7,13 @@
   <title>techo</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <script>
+    // Apply the saved theme before first paint so the page never flashes the other one.
+    try {
+      const t = JSON.parse(localStorage.getItem('techo.theme'));
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch {}
+  </script>
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body data-view="home">
@@ -39,6 +46,8 @@
         <button id="exportBtn">書き出し</button>
         <button id="importBtn">読み込み</button>
         <input id="importInput" type="file" accept="application/json" hidden>
+        <span class="grow"></span>
+        <span id="appVersion" class="dim"></span>
       </footer>
     </nav>
     <div id="scrim" hidden></div>
@@ -50,13 +59,18 @@
         <span id="count" class="dim"></span>
         <span class="grow"></span>
         <span id="notebookTools" hidden>
-          <button id="pinNotebookBtn" class="mini">ショートカット</button>
-          <button id="renameNotebookBtn" class="mini">名前変更</button>
-          <button id="deleteNotebookBtn" class="mini danger">削除</button>
+          <span id="numberedMark" class="dim" hidden>連番</span>
+          <button id="notebookMenuBtn" class="mini" title="このノートブックの操作(右クリックでも開けます)">…</button>
         </span>
       </header>
       <div class="search-row">
         <input id="search" type="search" placeholder="検索" autocomplete="off">
+        <select id="sortSelect" title="並べ替え">
+          <option value="updated">更新日順</option>
+          <option value="created">作成日順</option>
+          <option value="number">番号順</option>
+        </select>
+        <button id="sortDir" class="mini"></button>
       </div>
       <div id="bulkBar" hidden>
         <strong id="bulkCount"></strong>
@@ -72,11 +86,16 @@
     <section id="homeView" class="page">
       <header class="bar">
         <button class="drawer-only" data-drawer>メニュー</button>
-        <strong id="homeDate"></strong>
         <span class="grow"></span>
+        <button id="themeBtn" title="ライト/ダークを切り替え"></button>
         <button class="primary" data-new>新規ノート</button>
       </header>
       <div class="page-body">
+        <div class="banner">
+          <div class="banner-glow"></div>
+          <h1 class="wordmark">techo<span class="wordmark-dot">.</span></h1>
+          <p class="banner-sub"><span id="homeDate"></span><span id="homeStats"></span></p>
+        </div>
         <h2 class="page-h"><button class="link-plain" data-filter="all">最近のノート</button></h2>
         <div id="homeRecent" class="cards"></div>
         <div id="homeTasksWrap">
@@ -203,7 +222,7 @@
           </span>
         </div>
         <div class="scroll" id="editorScroll">
-          <input id="titleInput" placeholder="タイトル" autocomplete="off">
+          <div class="title-row"><span id="noteNumber"></span><input id="titleInput" placeholder="タイトル" autocomplete="off"></div>
           <div id="editor"></div>
         </div>
       </div>

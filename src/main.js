@@ -1,3 +1,4 @@
+import { registerSW } from 'virtual:pwa-register';
 import { Editor } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
@@ -15,10 +16,10 @@ import {
 } from './db.js';
 import { resolveHtml, unresolveHtml, storeImage, storeBlob, attachmentUrl } from './attachments.js';
 import { DueTaskItem, allTasks, withTaskChecked, groupOpenTasks, fmtDue, isoDay } from './tasks.js';
-import { exportAll, importFile } from './backup.js';
-import { importEnex } from './enex.js';
+import { exportAll, importFile, exportNotesJson, exportNotesHtml } from './backup.js';
+import { importEnex, PLACEHOLDER } from './enex.js';
 import { JaAutolink } from './autolink.js';
-import { setupToolbar, showPopover, menuItem } from './toolbar.js';
+import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
 
 const $ = id => document.getElementById(id);
 
@@ -338,11 +339,59 @@ async function leaveCurrent() {
 
 // ---------- rendering ----------
 
-const displayTitle = n => n.title || (n.text || '').split('\n').map(s => s.trim()).find(Boolean) || '無題';
+const baseTitle = n => n.title || (n.text || '').split('\n').map(s => s.trim()).find(Boolean) || '無題';
+
+// ---------- numbering (per notebook, opt-in) ----------
+// Notes in a numbered notebook are counted in creation order. A title that already carries a
+// number ("19 …", "tech-259 …") is left untouched and sets the count, so the auto numbers
+// continue from it ("tech-260"). Auto numbers are computed, never written into the title,
+// which is why deleting or moving a note makes the later ones shift.
+const OWN_NUMBER = /^\s*([A-Za-z][A-Za-z0-9_]*-)?(\d+)(?=[\s　.:：、)\]-]|$)/;
+let numbers = new Map(); // noteId -> { n, label } (label only for auto-numbered notes)
+
+function computeNumbers() {
+  numbers = new Map();
+  const byNb = new Map();
+  for (const n of notes) {
+    if (!byNb.has(n.notebookId)) byNb.set(n.notebookId, []);
+    byNb.get(n.notebookId).push(n);
+  }
+  for (const nb of notebooks) {
+    if (!nb.numbered) continue;
+    const list = (byNb.get(nb.id) || []).sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
+    let count = 0, prefix = '';
+    for (const n of list) {
+      const own = (n.title || '').match(OWN_NUMBER);
+      if (own) { count = Number(own[2]); prefix = own[1] || ''; numbers.set(n.id, { n: count }); }
+      else { count++; numbers.set(n.id, { n: count, label: `${prefix}${count}` }); }
+    }
+  }
+}
+
+const numberLabel = n => numbers.get(n.id)?.label || '';
+const numberValue = n => numbers.get(n.id)?.n ?? Number((n.title || '').match(OWN_NUMBER)?.[2] ?? Infinity);
+const displayTitle = n => (numberLabel(n) ? `${numberLabel(n)} ${baseTitle(n)}` : baseTitle(n));
+
+// ---------- sort ----------
+
+const SORT_KEY = 'techo.sort';
+let sort = { key: 'updated', dir: 'desc' };
+
+function sortNotes(list) {
+  const sign = sort.dir === 'asc' ? 1 : -1;
+  const cmp = {
+    updated: (a, b) => a.updatedAt - b.updatedAt,
+    created: (a, b) => a.createdAt - b.createdAt,
+    // Across notebooks, numbers only make sense within each one: group by notebook first.
+    number: (a, b) => (filter.type === 'notebook' ? 0 : sign * byName(notebookName(a.notebookId), notebookName(b.notebookId)))
+      || (numberValue(a) - numberValue(b)) || (a.createdAt - b.createdAt),
+  }[sort.key];
+  return list.sort((a, b) => sign * cmp(a, b));
+}
 
 function matches(note, terms) {
   if (!terms.length) return true;
-  const hay = `${note.title}\n${note.text}`.toLowerCase();
+  const hay = `${numberLabel(note)} ${note.title}\n${note.text}`.toLowerCase();
   return terms.every(t => hay.includes(t));
 }
 
@@ -421,6 +470,8 @@ function snippetOf(n) {
 
 function renderHome() {
   $('homeDate').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+  const open = allTasks(notes).filter(t => !t.checked).length;
+  $('homeStats').textContent = `${notes.length} notes · ${notebooks.length} notebooks · ${open} tasks`;
   $('homeRecent').replaceChildren(...recentNotes(8).map(n => {
     const card = document.createElement('button');
     card.className = 'card';
@@ -602,13 +653,16 @@ function renderBulkBar() {
 function renderList() {
   const terms = $('search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const scoped = notes.filter(inFilter);
-  const shown = scoped.filter(n => matches(n, terms)).sort((a, b) => b.updatedAt - a.updatedAt);
+  const shown = sortNotes(scoped.filter(n => matches(n, terms)));
+  $('sortSelect').value = sort.key;
+  $('sortDir').textContent = sort.dir === 'asc' ? '↑' : '↓';
+  $('sortDir').title = sort.dir === 'asc' ? '昇順(古い・小さい順)' : '降順(新しい・大きい順)';
 
   $('filterName').textContent = filter.type === 'notebook' ? notebookName(filter.id)
     : filter.type === 'shortcuts' ? 'ショートカット' : 'すべてのノート';
   $('count').textContent = terms.length ? `${shown.length} / ${scoped.length}件` : `${scoped.length}件`;
   $('notebookTools').hidden = filter.type !== 'notebook';
-  $('pinNotebookBtn').classList.toggle('on', !!notebooks.find(nb => nb.id === filter.id)?.pinned);
+  $('numberedMark').hidden = !notebooks.find(nb => nb.id === filter.id)?.numbered;
 
   const showNotebook = filter.type !== 'notebook';
   shownIds = shown.map(n => n.id);
@@ -651,10 +705,12 @@ function renderCrumbs() {
     Object.assign(document.createElement('option'), { value: nb.id, textContent: nb.name })));
   sel.value = note.notebookId;
   $('crumbTitle').textContent = displayTitle(note);
+  $('noteNumber').textContent = numberLabel(note);
   $('pinBtn').classList.toggle('on', !!note.pinned);
 }
 
 function renderAll() {
+  computeNumbers();
   renderSidebar();
   if (view === 'home') renderHome();
   if (view === 'notebooks') renderNotebooksPage();
@@ -818,7 +874,8 @@ async function lockScreenOn() {
 
 function enterStage() {
   $('stageBody').innerHTML = `<h1></h1>${editor.getHTML()}`;
-  $('stageBody').querySelector('h1').textContent = $('titleInput').value || '無題';
+  const cur = notes.find(n => n.id === currentId);
+  $('stageBody').querySelector('h1').textContent = [cur && numberLabel(cur), $('titleInput').value || '無題'].filter(Boolean).join(' ');
   $('stage').hidden = false;
   stageFont();
   lockScreenOn();
@@ -858,28 +915,46 @@ $('filesView').addEventListener('click', e => {
 });
 $('newNotebookBtn').onclick = () => createNotebook({ open: false });
 
-$('pinNotebookBtn').onclick = async () => {
-  const nb = notebooks.find(x => x.id === filter.id);
-  if (!nb) return;
-  nb.pinned = !nb.pinned;
-  await putNotebook(nb);
-  renderAll();
-};
 
 $('addNotebookBtn').onclick = () => createNotebook();
 
-$('renameNotebookBtn').onclick = async () => {
-  const nb = notebooks.find(x => x.id === filter.id);
-  const name = nb && prompt('ノートブックの名前', nb.name)?.trim();
-  if (!name) return;
+// ---------- notebook actions (list header buttons and right-click share these) ----------
+
+const filterNotebook = () => notebooks.find(x => x.id === filter.id);
+
+async function toggleNumbering(nb) {
+  nb.numbered = !nb.numbered;
+  await putNotebook(nb);
+  pushUndo(`「${nb.name}」の連番を${nb.numbered ? 'オン' : 'オフ'}にしました`, async () => {
+    nb.numbered = !nb.numbered;
+    await putNotebook(nb);
+    renderAll();
+  });
+  renderAll();
+}
+
+async function togglePinNotebook(nb) {
+  nb.pinned = !nb.pinned;
+  await putNotebook(nb);
+  pushUndo(`「${nb.name}」を${nb.pinned ? 'ショートカットに追加' : 'ショートカットから外'}しました`, async () => {
+    nb.pinned = !nb.pinned;
+    await putNotebook(nb);
+    renderAll();
+  });
+  renderAll();
+}
+
+async function renameNotebook(nb) {
+  const name = prompt('ノートブックの名前', nb.name)?.trim();
+  if (!name || name === nb.name) return;
+  const before = nb.name;
   nb.name = name;
   await putNotebook(nb);
+  pushUndo(`ノートブック名を「${name}」に変更しました`, async () => { nb.name = before; await putNotebook(nb); renderAll(); });
   renderAll();
-};
+}
 
-$('deleteNotebookBtn').onclick = async () => {
-  const nb = notebooks.find(x => x.id === filter.id);
-  if (!nb) return;
+async function removeNotebook(nb) {
   if (notebooks.length === 1) { alert('最後のノートブックは削除できません'); return; }
   const inside = notes.filter(n => n.notebookId === nb.id);
   const fallback = [...notebooks].filter(x => x.id !== nb.id).sort(byCreated)[0];
@@ -890,8 +965,133 @@ $('deleteNotebookBtn').onclick = async () => {
   for (const n of inside) { n.notebookId = fallback.id; await putNote(n); }
   await deleteNotebook(nb.id);
   notebooks = notebooks.filter(x => x.id !== nb.id);
-  setFilter({ type: 'all' });
+  if (filter.type === 'notebook' && filter.id === nb.id) setFilter({ type: 'all' }); else renderAll();
+}
+
+function exportNotebook(nb, format) {
+  const inside = sortNotes(notes.filter(n => n.notebookId === nb.id));
+  if (format === 'html') exportNotesHtml(inside, displayTitle, nb.name);
+  else exportNotesJson(inside, [nb], nb.name);
+}
+
+// ---------- right-click menus ----------
+
+async function renameNote(note) {
+  const input = prompt('ノートの名前', note.title || '');
+  if (input === null || input.trim() === (note.title || '')) return;
+  if (note.id === currentId && saveTimer) await saveNow();
+  const before = note.title || '';
+  const apply = async title => {
+    note.title = title;
+    note.updatedAt = Date.now();
+    await putNote(note);
+    if (note.id === currentId) $('titleInput').value = title;
+    renderAll();
+  };
+  await apply(input.trim());
+  pushUndo(`名前を「${input.trim() || '無題'}」に変更しました`, () => apply(before));
+}
+
+function exportNotes(list, format) {
+  const name = list.length === 1 ? displayTitle(list[0]) : `techo-${list.length}件`;
+  if (format === 'html') exportNotesHtml(list, displayTitle, name);
+  else exportNotesJson(list, notebooks.filter(nb => list.some(n => n.notebookId === nb.id)), name);
+}
+
+const menuLabel = text => Object.assign(document.createElement('div'), { className: 'menu-label', textContent: text });
+const danger = item => { item.classList.add('danger'); return item; };
+const sortedNotebooks = () => [...notebooks].sort((a, b) => byName(a.name, b.name));
+
+function noteMenu(x, y, ids, extra = []) {
+  const list = notes.filter(n => ids.includes(n.id));
+  if (!list.length) return;
+  const one = list.length === 1 ? list[0] : null;
+  const allPinned = list.every(n => n.pinned);
+  showMenuAt(x, y, p => p.append(
+    ...(one ? [
+      menuItem('開く', () => openNote(one.id)),
+      menuItem('新しいタブで開く', () => openNote(one.id, { newTab: true })),
+      menuItem('名前を変更', () => renameNote(one)),
+    ] : [menuLabel(`${list.length}件を選択中`)]),
+    ...extra,
+    menuSep(),
+    menuItem(allPinned ? 'ショートカットから外す' : 'ショートカットに追加', () => setPinned(ids, !allPinned)),
+    menuItem('ノートブックへ移動…', () => showMenuAt(x, y, q => q.append(
+      menuLabel('移動先'),
+      ...sortedNotebooks().map(nb => menuItem(nb.name, () => moveNotes(ids, nb.id))),
+    ))),
+    menuSep(),
+    menuItem('書き出し(HTML)', () => exportNotes(list, 'html')),
+    menuItem('書き出し(techo形式 .json)', () => exportNotes(list, 'json')),
+    menuSep(),
+    danger(menuItem(one ? '削除' : `${list.length}件を削除`, () => trashNotes(ids))),
+  ));
+}
+
+function notebookMenu(x, y, nb) {
+  showMenuAt(x, y, p => p.append(
+    menuItem('開く', () => setFilter({ type: 'notebook', id: nb.id })),
+    menuItem('名前を変更', () => renameNotebook(nb)),
+    menuItem(nb.numbered ? '連番をオフにする' : '連番をオンにする', () => toggleNumbering(nb)),
+    menuItem(nb.pinned ? 'ショートカットから外す' : 'ショートカットに追加', () => togglePinNotebook(nb)),
+    menuSep(),
+    menuItem('書き出し(HTML)', () => exportNotebook(nb, 'html')),
+    menuItem('書き出し(techo形式 .json)', () => exportNotebook(nb, 'json')),
+    menuSep(),
+    danger(menuItem('削除', () => removeNotebook(nb))),
+  ));
+}
+
+// Text areas keep the browser's own menu (copy, paste, spellcheck); everything else gets ours.
+document.addEventListener('contextmenu', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  const { clientX: x, clientY: y } = e;
+  const hit = sel => e.target.closest(sel);
+  let el;
+  if ((el = hit('#noteList li'))) {
+    const id = el.dataset.id;
+    if (!selected.has(id)) { selected.clear(); renderList(); }
+    noteMenu(x, y, selected.has(id) ? [...selected] : [id]);
+  } else if ((el = hit('.tab'))) {
+    const id = el.dataset.id;
+    noteMenu(x, y, [id], [menuItem('タブを閉じる', () => closeTab(id))]);
+  } else if ((el = hit('.trash-row'))) {
+    const id = el.querySelector('[data-restore]').dataset.restore;
+    const n = trashed.find(t => t.id === id);
+    showMenuAt(x, y, p => p.append(
+      menuItem('復元', () => restoreNotes([id])),
+      danger(menuItem('完全に削除', async () => {
+        if (n && confirm(`「${displayTitle(n)}」を完全に削除します。元に戻せません。`)) { await purge([n]); renderAll(); }
+      })),
+    ));
+  } else if ((el = hit('[data-notebook]'))) {
+    const nb = notebooks.find(x2 => x2.id === el.dataset.notebook);
+    if (nb) notebookMenu(x, y, nb);
+  } else if ((el = hit('[data-note]'))) {
+    noteMenu(x, y, [el.dataset.note]);
+  } else {
+    return;
+  }
+  e.preventDefault();
+});
+
+$('notebookMenuBtn').onclick = e => {
+  const nb = filterNotebook();
+  const r = e.currentTarget.getBoundingClientRect();
+  if (nb) notebookMenu(r.left, r.bottom + 6, nb);
 };
+
+$('sortSelect').onchange = e => {
+  sort = { key: e.target.value, dir: e.target.value === 'number' ? 'asc' : 'desc' };
+  store(SORT_KEY, sort);
+  renderList();
+};
+$('sortDir').onclick = () => {
+  sort = { ...sort, dir: sort.dir === 'asc' ? 'desc' : 'asc' };
+  store(SORT_KEY, sort);
+  renderList();
+};
+
 
 $('noteList').addEventListener('mousedown', e => { if (e.shiftKey) e.preventDefault(); }); // no text selection on Shift+click
 $('noteList').addEventListener('click', e => {
@@ -1030,6 +1230,7 @@ $('enexInput').onchange = async e => {
     alert(results.map(r => [
       `${r.notebook}: ${r.added}件を追加`,
       r.updated && `${r.updated}件を取り込み直し`,
+      r.repaired && `${r.repaired}件のタスクを修復`,
       r.skipped && `techoで編集済み・ゴミ箱の${r.skipped}件はそのまま`,
       r.failed.length && `読めなかった${r.failed.length}件: ${r.failed.join(' / ')}`,
     ].filter(Boolean).join('、')).join('\n'));
@@ -1076,15 +1277,44 @@ window.addEventListener('hashchange', route);
 
 // ---------- start ----------
 
+// ---------- theme (home-screen toggle; follows the OS until one is picked) ----------
+
+const THEME_KEY = 'techo.theme';
+const systemTheme = () => (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+const currentTheme = () => document.documentElement.dataset.theme || systemTheme();
+
+function applyTheme(theme) {
+  if (theme) document.documentElement.dataset.theme = theme;
+  $('themeBtn').textContent = currentTheme() === 'dark' ? 'ライトモード' : 'ダークモード';
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  document.querySelector('meta[name="theme-color"]').content = bg;
+}
+
+$('themeBtn').onclick = () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  store(THEME_KEY, next);
+  applyTheme(next);
+};
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => applyTheme());
+applyTheme();
+
+// A new deploy takes over as soon as it is downloaded, instead of the old cached app
+// quietly running until every tab is closed.
+registerSW({ immediate: true });
+
 (async () => {
   requestPersist();
+  $('appVersion').textContent = `v${__APP_VERSION__}`;
   await loadNotes();
   await purge(trashed.filter(n => n.deletedAt < Date.now() - TRASH_DAYS * DAY));
   notebooks = await getAllNotebooks();
   await ensureNotebooks();
   const ids = new Set(notes.map(n => n.id));
   tabs = load(TABS_KEY, []).filter(id => ids.has(id));
+  sort = { ...sort, ...load(SORT_KEY, {}) };
   const f = load(FILTER_KEY, { type: 'all' });
   filter = f.type === 'notebook' && !notebooks.some(nb => nb.id === f.id) ? { type: 'all' } : f;
   await route();
+  const leftover = notes.filter(n => n.html?.includes(PLACEHOLDER)).length;
+  if (leftover) showToast(`${leftover}件のノートにEvernoteのタスクが未変換です。その.enexを取り込み直すと直ります`, false);
 })();

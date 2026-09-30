@@ -27,8 +27,9 @@
   color-scheme: dark;
 }
 
+/* Light: follows the OS unless the home-screen toggle pinned a theme (html[data-theme]). */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     --bg: #f6f6f4;
     --sidebar: #ececea;
     --panel: #ffffff;
@@ -40,6 +41,25 @@
     --danger: #c43d3d;
     color-scheme: light;
   }
+}
+:root[data-theme="light"] {
+  --bg: #f6f6f4;
+  --sidebar: #ececea;
+  --panel: #ffffff;
+  --panel-2: #efefec;
+  --border: rgba(0, 0, 0, 0.10);
+  --text: #1d1e20;
+  --text-dim: rgba(29, 30, 32, 0.55);
+  --accent: #3f4652;
+  --danger: #c43d3d;
+  color-scheme: light;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/SpaceGrotesk-Variable.woff2') format('woff2');
+  font-weight: 300 700;
+  font-display: swap;
 }
 
 * { box-sizing: border-box; }
@@ -545,3 +565,99 @@ body:is([data-view="home"], [data-view="notebooks"], [data-view="tasks"], [data-
 }
 #toastMsg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #toastUndo { background: none; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); font-weight: 600; }
+
+/* ---------- numbering + sort ---------- */
+
+.search-row { display: flex; gap: 6px; align-items: center; }
+.search-row #search { flex: 1; width: auto; min-width: 0; }
+.search-row select { font-size: 12px; padding: 5px 4px; }
+#sortDir { font-size: 14px; padding: 4px 8px; }
+.title-row { display: flex; align-items: baseline; gap: 10px; max-width: 820px; margin: 0 auto; padding: 20px 20px 4px; }
+.title-row #titleInput { flex: 1; min-width: 0; margin: 0; padding: 0; max-width: none; }
+#noteNumber { font-size: 24px; font-weight: 700; color: var(--text-dim); }
+#noteNumber:empty { display: none; }
+
+/* ---------- context menu bits ---------- */
+
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+.menu-label { padding: 6px 10px 4px; font-size: 12px; color: var(--text-dim); }
+.menu-item.danger { color: var(--danger); }
+#popover { max-height: calc(100vh - 16px); overflow-y: auto; }
+
+/* ---------- home banner ----------
+   A page of ruled notebook paper (手帳): faint ruling, a red margin line, and a slow
+   sky/lavender glow behind a big Space Grotesk wordmark. */
+
+:root { --glow-a: rgba(125, 211, 252, 0.28); --glow-b: rgba(196, 181, 253, 0.24); --rule: rgba(255, 255, 255, 0.045); --margin-line: rgba(244, 114, 182, 0.35); }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { --glow-a: rgba(62, 142, 208, 0.20); --glow-b: rgba(142, 78, 198, 0.16); --rule: rgba(0, 0, 0, 0.06); --margin-line: rgba(229, 72, 77, 0.35); }
+}
+:root[data-theme="light"] { --glow-a: rgba(62, 142, 208, 0.20); --glow-b: rgba(142, 78, 198, 0.16); --rule: rgba(0, 0, 0, 0.06); --margin-line: rgba(229, 72, 77, 0.35); }
+
+.banner {
+  position: relative;
+  overflow: hidden;
+  height: 25vh;
+  min-height: 150px;
+  max-height: 260px;
+  margin: 12px 0 8px;
+  padding: 0 clamp(20px, 5vw, 56px) 0 clamp(64px, 9vw, 110px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background:
+    linear-gradient(to right, transparent calc(clamp(64px, 9vw, 110px) - 22px), var(--margin-line) calc(clamp(64px, 9vw, 110px) - 22px), var(--margin-line) calc(clamp(64px, 9vw, 110px) - 21px), transparent calc(clamp(64px, 9vw, 110px) - 21px)),
+    repeating-linear-gradient(to bottom, transparent 0 27px, var(--rule) 27px 28px),
+    var(--panel);
+}
+.banner-glow {
+  position: absolute;
+  inset: -40%;
+  background:
+    radial-gradient(40% 50% at 30% 40%, var(--glow-a), transparent 70%),
+    radial-gradient(35% 45% at 75% 65%, var(--glow-b), transparent 70%);
+  filter: blur(8px);
+  animation: drift 24s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes drift {
+  from { transform: translate(-4%, -2%) rotate(0deg); }
+  to { transform: translate(5%, 3%) rotate(8deg); }
+}
+@media (prefers-reduced-motion: reduce) { .banner-glow { animation: none; } }
+
+.wordmark {
+  position: relative;
+  margin: 0;
+  font-family: 'Space Grotesk', var(--font);
+  font-weight: 700;
+  font-size: clamp(56px, 10vw, 132px);
+  line-height: 0.9;
+  letter-spacing: -0.055em;
+  background: linear-gradient(120deg, var(--text) 30%, color-mix(in srgb, var(--text) 55%, var(--accent)) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.wordmark-dot { color: #f472b6; -webkit-text-fill-color: #f472b6; }
+.banner-sub {
+  position: relative;
+  margin: 14px 0 0 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-family: 'Space Grotesk', var(--font);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+#homeDate { color: var(--text); font-weight: 600; }
+@media (max-width: 760px) {
+  .banner { padding-left: 52px; border-radius: 12px; }
+  .banner { background:
+    linear-gradient(to right, transparent 32px, var(--margin-line) 32px, var(--margin-line) 33px, transparent 33px),
+    repeating-linear-gradient(to bottom, transparent 0 27px, var(--rule) 27px 28px),
+    var(--panel); }
+}
