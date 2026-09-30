@@ -29,6 +29,7 @@
           <button id="addNotebookBtn" class="mini" title="ノートブックを追加">+</button>
         </div>
         <div id="notebookList"></div>
+        <button class="side-item sep-top" data-go="trash"><span>ゴミ箱</span><span class="n" id="countTrash"></span></button>
       </div>
       <div class="side-import">
         <button id="enexBtn">Evernoteから取り込み</button>
@@ -56,6 +57,14 @@
       </header>
       <div class="search-row">
         <input id="search" type="search" placeholder="検索" autocomplete="off">
+      </div>
+      <div id="bulkBar" hidden>
+        <strong id="bulkCount"></strong>
+        <span class="grow"></span>
+        <select id="bulkMove" title="ノートブックへ移動"></select>
+        <button id="bulkPin" class="mini">ショートカット</button>
+        <button id="bulkDelete" class="mini danger">削除</button>
+        <button id="bulkClear" class="mini">解除</button>
       </div>
       <ul id="noteList"></ul>
     </aside>
@@ -132,6 +141,20 @@
       <div class="page-body"><div id="fileGrid" class="file-grid"></div></div>
     </section>
 
+    <section id="trashView" class="page">
+      <header class="bar">
+        <button class="drawer-only" data-drawer>メニュー</button>
+        <strong>ゴミ箱</strong>
+        <span id="trashCount" class="dim"></span>
+        <span class="grow"></span>
+        <button id="emptyTrashBtn" class="danger">ゴミ箱を空にする</button>
+      </header>
+      <div class="page-body">
+        <p class="dim trash-note">削除したノートは30日たつと自動で完全に削除されます。</p>
+        <div id="trashRows" class="task-page"></div>
+      </div>
+    </section>
+
     <main id="editorPane">
       <div id="tabs"><div id="tabList"></div><button id="newTabBtn" class="tab-add" title="新しいノートをタブで開く">+</button></div>
       <p id="emptyState">メモを選ぶか、新規で作成</p>
@@ -190,6 +213,7 @@
   </div>
 
   <div id="popover" hidden></div>
+  <div id="toast" hidden><span id="toastMsg"></span><button id="toastUndo">元に戻す</button></div>
 
   <section id="stage" hidden>
     <header class="bar">

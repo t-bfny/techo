@@ -325,7 +325,8 @@ export async function importEnex(file, onProgress = () => {}) {
     const changed = parseTime(el.querySelector(':scope > updated')?.textContent) || created;
     const sourceKey = `enex:${created}:${title}`;
     const prev = existing.get(sourceKey);
-    if (prev && prev.updatedAt !== changed) { skipped++; onProgress(added + updated + skipped, fraction); continue; }
+    // Leave notes alone that were edited in techo or are sitting in the trash.
+    if (prev && (prev.updatedAt !== changed || prev.deletedAt)) { skipped++; onProgress(added + updated + skipped, fraction); continue; }
 
     const media = await readResources(el);
     const html = convertNote(el, media);

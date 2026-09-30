@@ -11,6 +11,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 
 import {
   uid, getAllAttachments, getAllNotes, putNote, deleteNote, getAllNotebooks, putNotebook, deleteNotebook, requestPersist,
+  deleteAttachment,
 } from './db.js';
 import { resolveHtml, unresolveHtml, storeImage, storeBlob, attachmentUrl } from './attachments.js';
 import { DueTaskItem, allTasks, withTaskChecked, groupOpenTasks, fmtDue, isoDay } from './tasks.js';
@@ -21,7 +22,8 @@ import { setupToolbar, showPopover, menuItem } from './toolbar.js';
 
 const $ = id => document.getElementById(id);
 
-let notes = [];          // in-memory copy for list + search (1000 notes fits easily)
+let notes = [];          // in-memory copy for list + search (1000 notes fits easily); excludes trash
+let trashed = [];        // notes with deletedAt, kept for TRASH_DAYS
 let notebooks = [];
 let filter = { type: 'all' };  // all | shortcuts | notebook(id)
 let view = 'home';       // home | notebooks | list | note
@@ -144,6 +146,160 @@ async function ensureNotebooks() {
   }
 }
 
+// ---------- trash ----------
+
+const TRASH_DAYS = 30;
+const DAY = 86400000;
+const ATT_RE = /att:([a-z0-9]+)/g;
+
+async function loadNotes() {
+  const all = await getAllNotes();
+  notes = all.filter(n => !n.deletedAt);
+  trashed = all.filter(n => n.deletedAt);
+}
+
+// Deletes for good, along with attachments that no remaining note (live or trashed) uses.
+async function purge(list) {
+  if (!list.length) return;
+  const gone = new Set(list.map(n => n.id));
+  const keep = new Set();
+  for (const n of [...notes, ...trashed]) {
+    if (!gone.has(n.id)) for (const m of (n.html || '').matchAll(ATT_RE)) keep.add(m[1]);
+  }
+  for (const n of list) {
+    for (const m of (n.html || '').matchAll(ATT_RE)) if (!keep.has(m[1])) await deleteAttachment(m[1]);
+    await deleteNote(n.id);
+  }
+  trashed = trashed.filter(n => !gone.has(n.id));
+}
+
+async function trashNotes(ids, { record = true } = {}) {
+  const set = new Set(ids);
+  if (set.has(currentId) && saveTimer) await saveNow();
+  const moved = notes.filter(n => set.has(n.id));
+  if (!moved.length) return;
+  const now = Date.now();
+  for (const n of moved) { n.deletedAt = now; await putNote(n); }
+  notes = notes.filter(n => !set.has(n.id));
+  trashed.push(...moved);
+  for (const id of set) selected.delete(id);
+  const i = tabs.indexOf(currentId);
+  const wasOpen = set.has(currentId);
+  tabs = tabs.filter(t => !set.has(t));
+  store(TABS_KEY, tabs);
+  if (record) {
+    const label = moved.length === 1 ? `「${displayTitle(moved[0])}」` : `${moved.length}件`;
+    pushUndo(`${label}をゴミ箱に移動しました`, () => restoreNotes(moved.map(n => n.id), { record: false }));
+  }
+  if (wasOpen) {
+    currentId = null;
+    const next = tabs[Math.min(Math.max(i, 0), tabs.length - 1)];
+    await go(next ? `n/${next}` : 'list');
+  } else {
+    renderAll();
+  }
+}
+
+async function restoreNotes(ids, { record = true } = {}) {
+  const set = new Set(ids);
+  const back = trashed.filter(n => set.has(n.id));
+  const nbIds = new Set(notebooks.map(nb => nb.id));
+  for (const n of back) {
+    delete n.deletedAt;
+    if (!nbIds.has(n.notebookId)) n.notebookId = defaultNotebook().id; // its notebook was deleted meanwhile
+    await putNote(n);
+  }
+  trashed = trashed.filter(n => !set.has(n.id));
+  notes.push(...back);
+  if (record) pushUndo(`${back.length}件を復元しました`, () => trashNotes(back.map(n => n.id), { record: false }));
+  renderAll();
+}
+
+function renderTrashPage() {
+  const list = [...trashed].sort((a, b) => b.deletedAt - a.deletedAt);
+  $('trashCount').textContent = `${list.length}件`;
+  $('emptyTrashBtn').disabled = !list.length;
+  $('trashRows').replaceChildren(...(list.length ? [Object.assign(document.createElement('div'), { className: 'rows' })] : [
+    Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ゴミ箱は空です' }),
+  ]));
+  const box = $('trashRows').querySelector('.rows');
+  if (!box) return;
+  box.append(...list.map(n => {
+    const left = Math.max(1, Math.ceil((n.deletedAt + TRASH_DAYS * DAY - Date.now()) / DAY));
+    const row = document.createElement('div');
+    row.className = 'trash-row';
+    row.innerHTML = '<div class="trash-main"><span class="task-t ellipsis"></span><span class="dim ellipsis"></span></div>'
+      + '<button class="mini">復元</button><button class="mini danger">完全に削除</button>';
+    row.querySelector('.task-t').textContent = displayTitle(n);
+    row.querySelector('.dim').textContent = `${notebookName(n.notebookId) || '(削除したノートブック)'} · ${fmtDate(n.deletedAt)}に削除 · あと${left}日`;
+    const [restore, del] = row.querySelectorAll('button');
+    restore.dataset.restore = n.id;
+    del.dataset.purge = n.id;
+    return row;
+  }));
+}
+
+// ---------- undo (app-level: delete / move / shortcut) ----------
+
+const undoStack = [];
+let toastTimer = null;
+
+function showToast(message, undoable) {
+  $('toastMsg').textContent = message;
+  $('toastUndo').hidden = !undoable;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('toast').hidden = true; }, 6000);
+}
+
+function pushUndo(message, undo) {
+  undoStack.push({ message, undo });
+  if (undoStack.length > 50) undoStack.shift();
+  showToast(message, true);
+}
+
+async function undoLast() {
+  const action = undoStack.pop();
+  if (!action) return;
+  await action.undo();
+  showToast('元に戻しました', false);
+}
+
+// ---------- selection (Ctrl/Shift+click in the note list) ----------
+
+const selected = new Set();
+let anchorId = null;
+let shownIds = [];     // list order as last rendered, for Shift ranges
+
+function clearSelection() {
+  if (!selected.size) return;
+  selected.clear();
+  renderList();
+}
+
+async function moveNotes(ids, notebookId) {
+  const moved = notes.filter(n => ids.includes(n.id) && n.notebookId !== notebookId);
+  if (!moved.length) return;
+  const before = moved.map(n => [n, n.notebookId]);
+  for (const n of moved) { n.notebookId = notebookId; await putNote(n); }
+  pushUndo(`${moved.length}件を「${notebookName(notebookId)}」へ移動しました`, async () => {
+    for (const [n, prev] of before) { n.notebookId = prev; await putNote(n); }
+    renderAll();
+  });
+  renderAll();
+}
+
+async function setPinned(ids, pinned) {
+  const changed = notes.filter(n => ids.includes(n.id) && !!n.pinned !== pinned);
+  if (!changed.length) return;
+  for (const n of changed) { n.pinned = pinned; await putNote(n); }
+  pushUndo(`${changed.length}件を${pinned ? 'ショートカットに追加' : 'ショートカットから外'}しました`, async () => {
+    for (const n of changed) { n.pinned = !pinned; await putNote(n); }
+    renderAll();
+  });
+  renderAll();
+}
+
 // ---------- save ----------
 
 function scheduleSave() {
@@ -246,7 +402,8 @@ function renderSidebar() {
   $('countAll').textContent = notes.length;
   $('countTasks').textContent = allTasks(notes).filter(t => !t.checked).length || '';
   $('countFiles').textContent = fileRefs().size || '';
-  for (const g of ['tasks', 'files']) document.querySelector(`.side-item[data-go="${g}"]`).classList.toggle('active', view === g);
+  $('countTrash').textContent = trashed.length || '';
+  for (const g of ['tasks', 'files', 'trash']) document.querySelector(`.side-item[data-go="${g}"]`).classList.toggle('active', view === g);
   document.querySelector('.side-item[data-go="home"]').classList.toggle('active', view === 'home');
   document.querySelector('.side-item[data-filter="all"]').classList.toggle('active', onList && filter.type === 'all');
   document.querySelector('.side-head [data-go="notebooks"]').classList.toggle('active', view === 'notebooks');
@@ -430,6 +587,18 @@ async function renderFilesPage() {
     : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ノートに画像やファイルを入れると、ここに並びます' })]));
 }
 
+function renderBulkBar() {
+  $('bulkBar').hidden = !selected.size;
+  if (!selected.size) return;
+  $('bulkCount').textContent = `${selected.size}件を選択中`;
+  $('bulkMove').replaceChildren(
+    Object.assign(document.createElement('option'), { value: '', textContent: 'ノートブックへ移動' }),
+    ...[...notebooks].sort((a, b) => byName(a.name, b.name)).map(nb => Object.assign(document.createElement('option'), { value: nb.id, textContent: nb.name })),
+  );
+  const allPinned = [...selected].every(id => notes.find(n => n.id === id)?.pinned);
+  $('bulkPin').textContent = allPinned ? 'ショートカットから外す' : 'ショートカットに追加';
+}
+
 function renderList() {
   const terms = $('search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const scoped = notes.filter(inFilter);
@@ -442,10 +611,14 @@ function renderList() {
   $('pinNotebookBtn').classList.toggle('on', !!notebooks.find(nb => nb.id === filter.id)?.pinned);
 
   const showNotebook = filter.type !== 'notebook';
+  shownIds = shown.map(n => n.id);
+  for (const id of [...selected]) if (!notes.some(n => n.id === id)) selected.delete(id);
+  renderBulkBar();
   $('noteList').replaceChildren(...shown.map(n => {
     const li = document.createElement('li');
     li.dataset.id = n.id;
     if (n.id === currentId) li.classList.add('active');
+    if (selected.has(n.id)) li.classList.add('selected');
     const lines = (n.text || '').split('\n').map(s => s.trim()).filter(Boolean);
     const snippet = (n.title ? lines : lines.slice(1)).join(' ').slice(0, 80);
     li.innerHTML = '<div class="row"><span class="t"></span><span class="d"></span></div><div class="s"></div><div class="nb"></div>';
@@ -487,6 +660,7 @@ function renderAll() {
   if (view === 'notebooks') renderNotebooksPage();
   if (view === 'tasks') renderTasksPage();
   if (view === 'files') renderFilesPage();
+  if (view === 'trash') renderTrashPage();
   renderList();
   renderTabs();
   renderCrumbs();
@@ -560,7 +734,7 @@ function go(hash) {
 async function doRoute() {
   const hash = location.hash;
   const [, id, mode] = hash.match(/^#n\/([a-z0-9]+)(?:\/(stage))?$/) || [];
-  view = id ? 'note' : ({ '#notebooks': 'notebooks', '#list': 'list', '#tasks': 'tasks', '#files': 'files' })[hash] || 'home';
+  view = id ? 'note' : ({ '#notebooks': 'notebooks', '#list': 'list', '#tasks': 'tasks', '#files': 'files', '#trash': 'trash' })[hash] || 'home';
   document.body.dataset.view = view;
   if (id !== currentId) {
     await leaveCurrent();
@@ -589,6 +763,7 @@ async function newNote({ newTab = true } = {}) {
 // On a wide screen an open note stays open while the list changes; otherwise show the list.
 function setFilter(f) {
   filter = f;
+  selected.clear();
   store(FILTER_KEY, f);
   closeDrawer();
   if (view !== 'note' || matchMedia('(max-width: 760px)').matches) go('list');
@@ -718,9 +893,30 @@ $('deleteNotebookBtn').onclick = async () => {
   setFilter({ type: 'all' });
 };
 
+$('noteList').addEventListener('mousedown', e => { if (e.shiftKey) e.preventDefault(); }); // no text selection on Shift+click
 $('noteList').addEventListener('click', e => {
   const li = e.target.closest('li');
-  if (li) openNote(li.dataset.id, { newTab: e.ctrlKey || e.metaKey });
+  if (!li) return;
+  const id = li.dataset.id;
+  if (e.shiftKey) {
+    const from = shownIds.indexOf(shownIds.includes(anchorId) ? anchorId : currentId);
+    const to = shownIds.indexOf(id);
+    selected.clear();
+    if (from < 0) selected.add(id);
+    else shownIds.slice(Math.min(from, to), Math.max(from, to) + 1).forEach(x => selected.add(x));
+    renderList();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey) {
+    if (!selected.size && currentId && shownIds.includes(currentId)) selected.add(currentId);
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    anchorId = id;
+    renderList();
+    return;
+  }
+  selected.clear();
+  anchorId = id;
+  openNote(id);
 });
 $('noteList').addEventListener('auxclick', e => {
   const li = e.target.closest('li');
@@ -745,20 +941,11 @@ $('titleInput').onkeydown = e => {
 };
 $('backBtn').onclick = () => { go('list'); };
 
-$('nbSelect').onchange = async e => {
-  const note = notes.find(n => n.id === currentId);
-  if (!note) return;
-  note.notebookId = e.target.value;
-  await putNote(note);
-  renderAll();
-};
+$('nbSelect').onchange = e => { if (currentId) moveNotes([currentId], e.target.value); };
 
-$('pinBtn').onclick = async () => {
+$('pinBtn').onclick = () => {
   const note = notes.find(n => n.id === currentId);
-  if (!note) return;
-  note.pinned = !note.pinned;
-  await putNote(note);
-  renderAll();
+  if (note) setPinned([note.id], !note.pinned);
 };
 
 // Phones have no room for every header button; the rarely used ones live here.
@@ -795,20 +982,8 @@ $('stageExit').onclick = () => { go(`n/${currentId}`); };
 $('fontUp').onclick = () => stageFont(2);
 $('fontDown').onclick = () => stageFont(-2);
 
-$('deleteBtn').onclick = async () => {
-  const note = notes.find(n => n.id === currentId);
-  if (!note || !confirm(`「${displayTitle(note)}」を削除しますか`)) return;
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  await deleteNote(note.id);
-  notes = notes.filter(n => n.id !== note.id);
-  const i = tabs.indexOf(note.id);
-  tabs = tabs.filter(t => t !== note.id);
-  store(TABS_KEY, tabs);
-  currentId = null;
-  const next = tabs[Math.min(i, tabs.length - 1)];
-  go(next ? `n/${next}` : 'list');
-};
+// Deleting moves to the trash; no confirm needed since Ctrl+Z / 元に戻す brings it back.
+$('deleteBtn').onclick = () => { if (currentId) trashNotes([currentId]); };
 
 $('exportBtn').onclick = () => exportAll();
 $('importBtn').onclick = () => $('importInput').click();
@@ -818,7 +993,7 @@ $('importInput').onchange = async e => {
   if (!file) return;
   try {
     const count = await importFile(file);
-    notes = await getAllNotes();
+    await loadNotes();
     notebooks = await getAllNotebooks();
     await ensureNotebooks();
     renderAll();
@@ -848,18 +1023,54 @@ $('enexInput').onchange = async e => {
     btn.disabled = false;
     btn.textContent = 'Evernoteから取り込み';
   }
-  notes = await getAllNotes();
+  await loadNotes();
   notebooks = await getAllNotebooks();
   renderAll();
   if (results.length) {
     alert(results.map(r => [
       `${r.notebook}: ${r.added}件を追加`,
       r.updated && `${r.updated}件を取り込み直し`,
-      r.skipped && `techoで編集済みの${r.skipped}件はそのまま`,
+      r.skipped && `techoで編集済み・ゴミ箱の${r.skipped}件はそのまま`,
       r.failed.length && `読めなかった${r.failed.length}件: ${r.failed.join(' / ')}`,
     ].filter(Boolean).join('、')).join('\n'));
   }
 };
+
+$('bulkDelete').onclick = () => trashNotes([...selected]);
+$('bulkClear').onclick = clearSelection;
+$('bulkPin').onclick = () => {
+  const ids = [...selected];
+  setPinned(ids, !ids.every(id => notes.find(n => n.id === id)?.pinned));
+};
+$('bulkMove').onchange = e => { if (e.target.value) moveNotes([...selected], e.target.value); };
+
+$('trashView').addEventListener('click', async e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.restore) restoreNotes([b.dataset.restore]);
+  if (b.dataset.purge) {
+    const n = trashed.find(x => x.id === b.dataset.purge);
+    if (n && confirm(`「${displayTitle(n)}」を完全に削除します。元に戻せません。`)) { await purge([n]); renderAll(); }
+  }
+});
+$('emptyTrashBtn').onclick = async () => {
+  if (!trashed.length || !confirm(`ゴミ箱の${trashed.length}件を完全に削除します。元に戻せません。`)) return;
+  await purge([...trashed]);
+  renderAll();
+  showToast('ゴミ箱を空にしました', false);
+};
+
+$('toastUndo').onclick = () => { $('toast').hidden = true; undoLast(); };
+
+// Ctrl+Z / Delete / Esc act on notes only when you are not typing; inside the editor and
+// inputs they keep their normal text meaning.
+document.addEventListener('keydown', e => {
+  if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && !e.shiftKey && e.key.toLowerCase() === 'z' && undoStack.length) { e.preventDefault(); undoLast(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selected.size) { e.preventDefault(); trashNotes([...selected]); }
+  if (e.key === 'Escape') clearSelection();
+});
 
 window.addEventListener('hashchange', route);
 
@@ -867,7 +1078,8 @@ window.addEventListener('hashchange', route);
 
 (async () => {
   requestPersist();
-  notes = await getAllNotes();
+  await loadNotes();
+  await purge(trashed.filter(n => n.deletedAt < Date.now() - TRASH_DAYS * DAY));
   notebooks = await getAllNotebooks();
   await ensureNotebooks();
   const ids = new Set(notes.map(n => n.id));
