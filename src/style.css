@@ -358,3 +358,6 @@ button.side-head:hover { color: var(--text); }
 #stageBody h1 { font-size: 1.3em; margin-top: 0.4em; }
 #stageBody h2 { font-size: 1.15em; padding-top: 0.6em; border-top: 1px solid var(--border); }
 #stageBody h3 { font-size: 1.05em; }
+
+.side-import { padding: 8px 12px; border-top: 1px solid var(--border); }
+.side-import button { width: 100%; font-size: 13px; }

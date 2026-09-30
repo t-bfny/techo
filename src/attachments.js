@@ -43,9 +43,14 @@ async function shrink(file) {
   }
 }
 
-export async function storeImage(file) {
-  const blob = await shrink(file);
+// Returns the attachment id; images are shrunk, other files kept as-is.
+export async function storeBlob(file, name = '') {
+  const blob = file.type.startsWith('image/') ? await shrink(file) : file;
   const id = uid();
-  await putAttachment({ id, blob, type: blob.type, createdAt: Date.now() });
-  return urlFor(id);
+  await putAttachment({ id, blob, type: blob.type, name, createdAt: Date.now() });
+  return id;
+}
+
+export async function storeImage(file) {
+  return urlFor(await storeBlob(file));
 }

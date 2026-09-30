@@ -12,7 +12,7 @@ export async function exportAll() {
   const notebooks = await getAllNotebooks();
   const atts = await getAllAttachments();
   const attachments = await Promise.all(atts.map(async a => ({
-    id: a.id, type: a.type, createdAt: a.createdAt, data: await toDataUrl(a.blob),
+    id: a.id, type: a.type, name: a.name, createdAt: a.createdAt, data: await toDataUrl(a.blob),
   })));
   const json = JSON.stringify({ app: 'techo', version: 1, exportedAt: Date.now(), notebooks, notes, attachments });
   const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
@@ -33,7 +33,7 @@ export async function importFile(file) {
   }
   for (const a of data.attachments || []) {
     const blob = await (await fetch(a.data)).blob();
-    await putAttachment({ id: a.id, blob, type: a.type, createdAt: a.createdAt });
+    await putAttachment({ id: a.id, blob, type: a.type, name: a.name, createdAt: a.createdAt });
   }
   let count = 0;
   for (const n of data.notes || []) {

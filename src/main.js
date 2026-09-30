@@ -14,6 +14,7 @@ import {
 } from './db.js';
 import { resolveHtml, unresolveHtml, storeImage } from './attachments.js';
 import { exportAll, importFile } from './backup.js';
+import { importEnex } from './enex.js';
 import { JaAutolink } from './autolink.js';
 import { setupToolbar, showPopover, menuItem } from './toolbar.js';
 
@@ -45,7 +46,15 @@ function store(key, value) {
 const editor = new Editor({
   element: $('editor'),
   extensions: [
-    StarterKit.configure({ link: { autolink: true, openOnClick: true, defaultProtocol: 'https' } }),
+    StarterKit.configure({
+      link: {
+        autolink: true,
+        openOnClick: true,
+        defaultProtocol: 'https',
+        // Attachment links (imported PDFs etc.) are object URLs while the note is open.
+        isAllowedUri: (url, ctx) => url.startsWith('blob:') || ctx.defaultValidate(url),
+      },
+    }),
     Image,
     Youtube.configure({ nocookie: true, width: 640, height: 360, addPasteHandler: false }),
     Table.configure({ resizable: false }),
@@ -541,6 +550,34 @@ $('importInput').onchange = async e => {
     alert(`${count}件を読み込みました`);
   } catch (err) {
     alert(`読み込めませんでした: ${err.message}`);
+  }
+};
+
+$('enexBtn').onclick = () => $('enexInput').click();
+$('enexInput').onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (!files.length) return;
+  const btn = $('enexBtn');
+  btn.disabled = true;
+  const results = [];
+  try {
+    for (const [fi, file] of files.entries()) {
+      results.push(await importEnex(file, (done, total) => {
+        btn.textContent = `取り込み中 ${fi + 1}/${files.length}: ${done}/${total}`;
+      }));
+    }
+  } catch (err) {
+    alert(`取り込みに失敗しました: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Evernoteから取り込み';
+  }
+  notes = await getAllNotes();
+  notebooks = await getAllNotebooks();
+  renderAll();
+  if (results.length) {
+    alert(results.map(r => `${r.notebook}: ${r.added}件を追加` + (r.skipped ? `(取り込み済み${r.skipped}件はスキップ)` : '')).join('\n'));
   }
 };
 

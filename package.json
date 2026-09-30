@@ -26,7 +26,8 @@
     "@tiptap/extension-text-style": "^3.31.3",
     "@tiptap/extension-youtube": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
-    "@tiptap/starter-kit": "^3.31.3"
+    "@tiptap/starter-kit": "^3.31.3",
+    "spark-md5": "^3.0.2"
   },
   "devDependencies": {
     "vite": "^8.3.1",
