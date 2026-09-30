@@ -23,6 +23,7 @@ const $ = id => document.getElementById(id);
 let notes = [];          // in-memory copy for list + search (1000 notes fits easily)
 let notebooks = [];
 let filter = { type: 'all' };  // all | shortcuts | notebook(id)
+let view = 'home';       // home | notebooks | list | note
 let tabs = [];           // note ids open as tabs, in order
 let currentId = null;
 let saveTimer = null;
@@ -214,20 +215,104 @@ function sideItem(label, count, active, dataset) {
   return b;
 }
 
-function renderSidebar() {
-  $('countAll').textContent = notes.length;
-  document.querySelector('[data-filter="all"]').classList.toggle('active', filter.type === 'all');
+const byName = (a, b) => a.localeCompare(b, 'ja');
+const recentNotes = n => [...notes].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, n);
 
-  const pinned = notes.filter(n => n.pinned).sort((a, b) => displayTitle(a).localeCompare(displayTitle(b), 'ja'));
-  $('shortcutList').replaceChildren(...(pinned.length
-    ? pinned.map(n => sideItem(displayTitle(n), null, n.id === currentId, { note: n.id }))
-    : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ノートの「ショートカット」で追加' })]));
-
+function notebookCounts() {
   const counts = {};
   for (const n of notes) counts[n.notebookId] = (counts[n.notebookId] || 0) + 1;
-  const sorted = [...notebooks].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-  $('notebookList').replaceChildren(...sorted.map(nb =>
-    sideItem(nb.name, counts[nb.id] || 0, filter.type === 'notebook' && filter.id === nb.id, { notebook: nb.id })));
+  return counts;
+}
+
+// Shortcuts hold both notebooks (shown with their note count, like Evernote) and notes.
+function shortcutItems(counts, isActive) {
+  const nbs = notebooks.filter(nb => nb.pinned).sort((a, b) => byName(a.name, b.name))
+    .map(nb => sideItem(nb.name, counts[nb.id] || 0, isActive('notebook', nb.id), { notebook: nb.id }));
+  const ns = notes.filter(n => n.pinned).sort((a, b) => byName(displayTitle(a), displayTitle(b)))
+    .map(n => sideItem(displayTitle(n), null, isActive('note', n.id), { note: n.id }));
+  const items = [...nbs, ...ns];
+  return items.length ? items
+    : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ノートやノートブックの「ショートカット」で追加' })];
+}
+
+function renderSidebar() {
+  const counts = notebookCounts();
+  const onList = view === 'list' || view === 'note';
+  const isActive = (kind, id) => kind === 'note' ? id === currentId
+    : onList && filter.type === 'notebook' && filter.id === id;
+
+  $('countAll').textContent = notes.length;
+  document.querySelector('.side-item[data-go="home"]').classList.toggle('active', view === 'home');
+  document.querySelector('.side-item[data-filter="all"]').classList.toggle('active', onList && filter.type === 'all');
+  document.querySelector('.side-head [data-go="notebooks"]').classList.toggle('active', view === 'notebooks');
+
+  $('shortcutList').replaceChildren(...shortcutItems(counts, isActive));
+  $('recentList').replaceChildren(...recentNotes(5).map(n => sideItem(displayTitle(n), null, n.id === currentId, { note: n.id })));
+  $('notebookList').replaceChildren(...[...notebooks].sort((a, b) => byName(a.name, b.name)).map(nb =>
+    sideItem(nb.name, counts[nb.id] || 0, isActive('notebook', nb.id), { notebook: nb.id })));
+}
+
+function snippetOf(n) {
+  const lines = (n.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  return (n.title ? lines : lines.slice(1)).join(' ');
+}
+
+function renderHome() {
+  $('homeDate').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+  $('homeRecent').replaceChildren(...recentNotes(8).map(n => {
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.dataset.note = n.id;
+    card.innerHTML = '<span class="card-t"></span><span class="card-s"></span><span class="card-d"></span>';
+    card.children[0].textContent = displayTitle(n);
+    card.children[1].textContent = snippetOf(n).slice(0, 120);
+    card.children[2].textContent = `${fmtDate(n.updatedAt)} · ${notebookName(n.notebookId)}`;
+    return card;
+  }));
+  if (!notes.length) $('homeRecent').append(Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'まだノートがありません' }));
+  const counts = notebookCounts();
+  $('homeShortcuts').replaceChildren(...shortcutItems(counts, () => false));
+  $('homeNotebooks').replaceChildren(...[...notebooks].sort((a, b) => byName(a.name, b.name)).map(nb =>
+    sideItem(nb.name, counts[nb.id] || 0, false, { notebook: nb.id })));
+}
+
+const expanded = new Set(); // notebook ids opened on the notebooks page
+
+function renderNotebooksPage() {
+  const counts = notebookCounts();
+  const byNb = {};
+  for (const n of notes) (byNb[n.notebookId] ||= []).push(n);
+  $('notebookCount').textContent = `${notebooks.length}冊`;
+
+  const rows = [];
+  for (const nb of [...notebooks].sort((a, b) => byName(a.name, b.name))) {
+    const inside = (byNb[nb.id] || []).sort((a, b) => b.updatedAt - a.updatedAt);
+    const open = expanded.has(nb.id);
+    const row = document.createElement('div');
+    row.className = 'nb-row';
+    row.innerHTML = '<span class="nb-name"><button class="caret"></button><button class="link-plain ellipsis"></button></span><span class="dim"></span><span class="dim"></span>';
+    const [caret, name] = row.firstChild.children;
+    caret.textContent = open ? '▾' : '▸';
+    caret.dataset.toggle = nb.id;
+    caret.disabled = !inside.length;
+    name.textContent = nb.name;
+    name.dataset.notebook = nb.id;
+    row.children[1].textContent = counts[nb.id] || 0;
+    row.children[2].textContent = fmtDate(inside[0]?.updatedAt || nb.createdAt);
+    rows.push(row);
+    if (!open) continue;
+    for (const n of inside) {
+      const r = document.createElement('div');
+      r.className = 'nb-row child';
+      r.innerHTML = '<span class="nb-name"><button class="link-plain ellipsis"></button></span><span></span><span class="dim"></span>';
+      const b = r.querySelector('button');
+      b.textContent = displayTitle(n);
+      b.dataset.note = n.id;
+      r.children[2].textContent = fmtDate(n.updatedAt);
+      rows.push(r);
+    }
+  }
+  $('nbRows').replaceChildren(...rows);
 }
 
 function renderList() {
@@ -239,6 +324,7 @@ function renderList() {
     : filter.type === 'shortcuts' ? 'ショートカット' : 'すべてのノート';
   $('count').textContent = terms.length ? `${shown.length} / ${scoped.length}件` : `${scoped.length}件`;
   $('notebookTools').hidden = filter.type !== 'notebook';
+  $('pinNotebookBtn').classList.toggle('on', !!notebooks.find(nb => nb.id === filter.id)?.pinned);
 
   const showNotebook = filter.type !== 'notebook';
   $('noteList').replaceChildren(...shown.map(n => {
@@ -282,6 +368,8 @@ function renderCrumbs() {
 
 function renderAll() {
   renderSidebar();
+  if (view === 'home') renderHome();
+  if (view === 'notebooks') renderNotebooksPage();
   renderList();
   renderTabs();
   renderCrumbs();
@@ -297,7 +385,7 @@ function openNote(id, { newTab = false } = {}) {
     else tabs[i] = id;
     store(TABS_KEY, tabs);
   }
-  location.hash = `n/${id}`;
+  return go(`n/${id}`);
 }
 
 async function closeTab(id) {
@@ -308,7 +396,7 @@ async function closeTab(id) {
     tabs = tabs.filter(t => t !== id);
     store(TABS_KEY, tabs);
     const next = tabs[Math.min(i, tabs.length - 1)];
-    location.hash = next ? `n/${next}` : '';
+    go(next ? `n/${next}` : 'list');
   } else {
     tabs = tabs.filter(t => t !== id);
     store(TABS_KEY, tabs);
@@ -318,7 +406,7 @@ async function closeTab(id) {
 
 async function showNote(id) {
   const note = notes.find(n => n.id === id);
-  if (!note) { location.hash = ''; return; }
+  if (!note) { go(''); return; }
   if (!tabs.includes(id)) { tabs.push(id); store(TABS_KEY, tabs); }
   currentId = id;
   loading = true;
@@ -334,8 +422,29 @@ async function showNote(id) {
   renderAll();
 }
 
-async function route() {
-  const [, id, mode] = location.hash.match(/^#n\/([a-z0-9]+)(?:\/(stage))?$/) || [];
+// Routes run one at a time, in order: opening a note is async, and a second navigation
+// (or typing into the new note) must not interleave with the first.
+let routing = Promise.resolve();
+let routedHash = null;
+
+function route() {
+  if (location.hash === routedHash) return routing;
+  routedHash = location.hash;
+  routing = routing.then(doRoute);
+  return routing;
+}
+
+function go(hash) {
+  location.hash = hash;
+  return route();
+}
+
+// #home (default) | #notebooks | #list | #n/ID | #n/ID/stage
+async function doRoute() {
+  const hash = location.hash;
+  const [, id, mode] = hash.match(/^#n\/([a-z0-9]+)(?:\/(stage))?$/) || [];
+  view = id ? 'note' : hash === '#notebooks' ? 'notebooks' : hash === '#list' ? 'list' : 'home';
+  document.body.dataset.view = view;
   if (id !== currentId) {
     await leaveCurrent();
     if (id) await showNote(id);
@@ -344,8 +453,8 @@ async function route() {
     $('editorWrap').hidden = true;
     $('emptyState').hidden = false;
     document.body.classList.remove('show-editor');
-    renderAll();
   }
+  renderAll();
   if (mode === 'stage') enterStage(); else exitStage();
 }
 
@@ -355,17 +464,45 @@ async function newNote({ newTab = true } = {}) {
   const note = { id: uid(), title: '', html: '', text: '', notebookId, pinned: false, createdAt: now, updatedAt: now };
   await putNote(note);
   notes.push(note);
-  openNote(note.id, { newTab });
   closeDrawer();
-  setTimeout(() => $('titleInput').focus(), 50);
+  await openNote(note.id, { newTab });
+  $('titleInput').focus();
 }
 
+// On a wide screen an open note stays open while the list changes; otherwise show the list.
 function setFilter(f) {
   filter = f;
   store(FILTER_KEY, f);
   closeDrawer();
-  if (matchMedia('(max-width: 760px)').matches) location.hash = '';
+  if (view !== 'note' || matchMedia('(max-width: 760px)').matches) go('list');
   renderAll();
+}
+
+async function createNotebook({ open = true } = {}) {
+  const name = prompt('新しいノートブックの名前')?.trim();
+  if (!name) return;
+  const nb = { id: uid(), name, pinned: false, createdAt: Date.now() };
+  await putNotebook(nb);
+  notebooks.push(nb);
+  if (open) setFilter({ type: 'notebook', id: nb.id }); else renderAll();
+}
+
+// Shared by the sidebar, home and notebooks page: every clickable item carries a data-* target.
+function handleNav(e) {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const d = b.dataset;
+  if (d.toggle) {
+    expanded.has(d.toggle) ? expanded.delete(d.toggle) : expanded.add(d.toggle);
+    renderNotebooksPage();
+    return;
+  }
+  if (d.go) { closeDrawer(); go(d.go); }
+  if (d.filter) setFilter({ type: d.filter });
+  if (d.notebook) setFilter({ type: 'notebook', id: d.notebook });
+  if (d.note) { closeDrawer(); openNote(d.note); }
+  if ('new' in d) newNote();
+  if ('drawer' in d) openDrawer();
 }
 
 // ---------- drawer (sidebar on narrow screens) ----------
@@ -415,23 +552,18 @@ $('newTabBtn').onclick = () => newNote();
 $('menuBtn').onclick = openDrawer;
 $('scrim').onclick = closeDrawer;
 
-$('sidebar').addEventListener('click', e => {
-  const b = e.target.closest('.side-item, [data-filter]');
-  if (!b) return;
-  if (b.dataset.filter === 'all') setFilter({ type: 'all' });
-  if (b.dataset.filter === 'shortcuts') setFilter({ type: 'shortcuts' });
-  if (b.dataset.notebook) setFilter({ type: 'notebook', id: b.dataset.notebook });
-  if (b.dataset.note) { closeDrawer(); openNote(b.dataset.note); }
-});
+for (const id of ['sidebar', 'homeView', 'notebooksView']) $(id).addEventListener('click', handleNav);
+$('newNotebookBtn').onclick = () => createNotebook({ open: false });
 
-$('addNotebookBtn').onclick = async () => {
-  const name = prompt('新しいノートブックの名前')?.trim();
-  if (!name) return;
-  const nb = { id: uid(), name, createdAt: Date.now() };
+$('pinNotebookBtn').onclick = async () => {
+  const nb = notebooks.find(x => x.id === filter.id);
+  if (!nb) return;
+  nb.pinned = !nb.pinned;
   await putNotebook(nb);
-  notebooks.push(nb);
-  setFilter({ type: 'notebook', id: nb.id });
+  renderAll();
 };
+
+$('addNotebookBtn').onclick = () => createNotebook();
 
 $('renameNotebookBtn').onclick = async () => {
   const nb = notebooks.find(x => x.id === filter.id);
@@ -471,7 +603,7 @@ $('tabList').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
   if (e.target.closest('.tab-close')) closeTab(tab.dataset.id);
-  else location.hash = `n/${tab.dataset.id}`;
+  else go(`n/${tab.dataset.id}`);
 });
 $('tabList').addEventListener('auxclick', e => {
   const tab = e.target.closest('.tab');
@@ -483,7 +615,7 @@ $('titleInput').oninput = () => { scheduleSave(); $('crumbTitle').textContent = 
 $('titleInput').onkeydown = e => {
   if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); editor.commands.focus('start'); }
 };
-$('backBtn').onclick = () => { location.hash = ''; };
+$('backBtn').onclick = () => { go('list'); };
 
 $('nbSelect').onchange = async e => {
   const note = notes.find(n => n.id === currentId);
@@ -515,8 +647,8 @@ $('moreBtn').onclick = e => {
 };
 
 $('imageInput').onchange =e => { insertImageFiles(e.target.files); e.target.value = ''; };
-$('stageBtn').onclick = async () => { await saveNow(); location.hash = `n/${currentId}/stage`; };
-$('stageExit').onclick = () => { location.hash = `n/${currentId}`; };
+$('stageBtn').onclick = async () => { await saveNow(); go(`n/${currentId}/stage`); };
+$('stageExit').onclick = () => { go(`n/${currentId}`); };
 $('fontUp').onclick = () => stageFont(2);
 $('fontDown').onclick = () => stageFont(-2);
 
@@ -532,7 +664,7 @@ $('deleteBtn').onclick = async () => {
   store(TABS_KEY, tabs);
   currentId = null;
   const next = tabs[Math.min(i, tabs.length - 1)];
-  location.hash = next ? `n/${next}` : '';
+  go(next ? `n/${next}` : 'list');
 };
 
 $('exportBtn').onclick = () => exportAll();

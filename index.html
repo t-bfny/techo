@@ -9,17 +9,23 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/src/style.css">
 </head>
-<body>
+<body data-view="home">
   <div id="app">
     <nav id="sidebar">
       <div class="side-top">
         <button id="newBtn" class="primary">新規ノート</button>
       </div>
       <div class="side-scroll">
-        <button class="side-item" data-filter="all"><span>すべてのノート</span><span class="n" id="countAll"></span></button>
+        <button class="side-item" data-go="home"><span>ホーム画面</span></button>
         <button class="side-head link" data-filter="shortcuts"><span>ショートカット</span></button>
         <div id="shortcutList"></div>
-        <div class="side-head"><span>ノートブック</span><button id="addNotebookBtn" class="mini" title="ノートブックを追加">+</button></div>
+        <div class="side-head"><span>最近のノート</span></div>
+        <div id="recentList"></div>
+        <button class="side-item sep-top" data-filter="all"><span>ノート</span><span class="n" id="countAll"></span></button>
+        <div class="side-head">
+          <button class="link-plain" data-go="notebooks">ノートブック</button>
+          <button id="addNotebookBtn" class="mini" title="ノートブックを追加">+</button>
+        </div>
         <div id="notebookList"></div>
       </div>
       <div class="side-import">
@@ -41,6 +47,7 @@
         <span id="count" class="dim"></span>
         <span class="grow"></span>
         <span id="notebookTools" hidden>
+          <button id="pinNotebookBtn" class="mini">ショートカット</button>
           <button id="renameNotebookBtn" class="mini">名前変更</button>
           <button id="deleteNotebookBtn" class="mini danger">削除</button>
         </span>
@@ -50,6 +57,45 @@
       </div>
       <ul id="noteList"></ul>
     </aside>
+
+    <section id="homeView" class="page">
+      <header class="bar">
+        <button class="drawer-only" data-drawer>メニュー</button>
+        <strong id="homeDate"></strong>
+        <span class="grow"></span>
+        <button class="primary" data-new>新規ノート</button>
+      </header>
+      <div class="page-body">
+        <h2 class="page-h"><button class="link-plain" data-filter="all">最近のノート</button></h2>
+        <div id="homeRecent" class="cards"></div>
+        <div class="home-cols">
+          <div>
+            <h2 class="page-h"><button class="link-plain" data-filter="shortcuts">ショートカット</button></h2>
+            <div id="homeShortcuts" class="rows"></div>
+          </div>
+          <div>
+            <h2 class="page-h"><button class="link-plain" data-go="notebooks">ノートブック</button></h2>
+            <div id="homeNotebooks" class="rows"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="notebooksView" class="page">
+      <header class="bar">
+        <button class="drawer-only" data-drawer>メニュー</button>
+        <strong>ノートブック</strong>
+        <span id="notebookCount" class="dim"></span>
+        <span class="grow"></span>
+        <button id="newNotebookBtn">新規ノートブック</button>
+      </header>
+      <div class="page-body">
+        <div class="nb-table">
+          <div class="nb-head"><span>名前</span><span>ノート</span><span>更新</span></div>
+          <div id="nbRows"></div>
+        </div>
+      </div>
+    </section>
 
     <main id="editorPane">
       <div id="tabs"><div id="tabList"></div><button id="newTabBtn" class="tab-add" title="新しいノートをタブで開く">+</button></div>
