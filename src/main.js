@@ -6,13 +6,14 @@ import Youtube, { isValidYoutubeUrl } from '@tiptap/extension-youtube';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { TextStyle, Color } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
-import { TaskList, TaskItem } from '@tiptap/extension-list';
+import { TaskList } from '@tiptap/extension-list';
 import Placeholder from '@tiptap/extension-placeholder';
 
 import {
-  uid, getAllNotes, putNote, deleteNote, getAllNotebooks, putNotebook, deleteNotebook, requestPersist,
+  uid, getAllAttachments, getAllNotes, putNote, deleteNote, getAllNotebooks, putNotebook, deleteNotebook, requestPersist,
 } from './db.js';
-import { resolveHtml, unresolveHtml, storeImage } from './attachments.js';
+import { resolveHtml, unresolveHtml, storeImage, storeBlob, attachmentUrl } from './attachments.js';
+import { DueTaskItem, allTasks, withTaskChecked, groupOpenTasks, fmtDue, isoDay } from './tasks.js';
 import { exportAll, importFile } from './backup.js';
 import { importEnex } from './enex.js';
 import { JaAutolink } from './autolink.js';
@@ -62,7 +63,7 @@ const editor = new Editor({
     TableRow, TableHeader, TableCell,
     TextStyle, Color,
     Highlight.configure({ multicolor: true }),
-    TaskList, TaskItem.configure({ nested: true }),
+    TaskList, DueTaskItem.configure({ nested: true }),
     Placeholder.configure({ placeholder: '本文' }),
     JaAutolink,
   ],
@@ -105,6 +106,7 @@ function insertYoutubeFromText(text) {
 
 setupToolbar(editor, {
   image: () => $('imageInput').click(),
+  file: () => $('fileInput').click(),
   youtube: () => {
     const src = prompt('YouTubeのURL');
     if (src && !insertYoutubeFromText(src)) alert('YouTubeのURLとして読めませんでした');
@@ -242,6 +244,9 @@ function renderSidebar() {
     : onList && filter.type === 'notebook' && filter.id === id;
 
   $('countAll').textContent = notes.length;
+  $('countTasks').textContent = allTasks(notes).filter(t => !t.checked).length || '';
+  $('countFiles').textContent = fileRefs().size || '';
+  for (const g of ['tasks', 'files']) document.querySelector(`.side-item[data-go="${g}"]`).classList.toggle('active', view === g);
   document.querySelector('.side-item[data-go="home"]').classList.toggle('active', view === 'home');
   document.querySelector('.side-item[data-filter="all"]').classList.toggle('active', onList && filter.type === 'all');
   document.querySelector('.side-head [data-go="notebooks"]').classList.toggle('active', view === 'notebooks');
@@ -272,6 +277,10 @@ function renderHome() {
   if (!notes.length) $('homeRecent').append(Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'まだノートがありません' }));
   const counts = notebookCounts();
   $('homeShortcuts').replaceChildren(...shortcutItems(counts, () => false));
+  const today = isoDay();
+  const due = allTasks(notes).filter(t => !t.checked && t.due && t.due <= today).sort((a, b) => a.due.localeCompare(b.due));
+  $('homeTasksWrap').hidden = !due.length;
+  $('homeTasks').replaceChildren(...due.slice(0, 8).map(taskRow));
   $('homeNotebooks').replaceChildren(...[...notebooks].sort((a, b) => byName(a.name, b.name)).map(nb =>
     sideItem(nb.name, counts[nb.id] || 0, false, { notebook: nb.id })));
 }
@@ -313,6 +322,112 @@ function renderNotebooksPage() {
     }
   }
   $('nbRows').replaceChildren(...rows);
+}
+
+// ---------- tasks page ----------
+
+let taskMode = 'open';
+
+function taskRow(t) {
+  const row = document.createElement('div');
+  row.className = 'task-row' + (t.checked ? ' done' : '');
+  row.innerHTML = '<input type="checkbox"><span class="task-t"></span><span class="task-due"></span><button class="link-plain task-note ellipsis"></button>';
+  const [box, text, due, note] = row.children;
+  box.checked = t.checked;
+  box.dataset.task = `${t.noteId}:${t.index}`;
+  text.textContent = t.text;
+  due.textContent = fmtDue(t.due);
+  if (t.due && !t.checked && t.due < isoDay()) due.classList.add('overdue');
+  const n = notes.find(x => x.id === t.noteId);
+  note.textContent = n ? displayTitle(n) : '';
+  note.dataset.note = t.noteId;
+  return row;
+}
+
+function renderTasksPage() {
+  const tasks = allTasks(notes);
+  const open = tasks.filter(t => !t.checked);
+  $('taskCount').textContent = `未完了 ${open.length}件`;
+  for (const b of document.querySelectorAll('[data-taskmode]')) b.classList.toggle('on', b.dataset.taskmode === taskMode);
+  const groups = taskMode === 'open'
+    ? groupOpenTasks(open)
+    : [['完了', tasks.filter(t => t.checked)]].filter(([, l]) => l.length);
+  const out = groups.map(([label, list]) => {
+    const sec = document.createElement('section');
+    sec.innerHTML = '<h2 class="page-h"></h2><div class="rows"></div>';
+    sec.firstChild.textContent = `${label} ${list.length}`;
+    sec.lastChild.append(...list.map(taskRow));
+    return sec;
+  });
+  if (!out.length) {
+    out.push(Object.assign(document.createElement('p'), {
+      className: 'side-empty',
+      textContent: taskMode === 'open' ? 'ノートにチェックリストを書くと、ここにまとめて出ます' : '完了したタスクはまだありません',
+    }));
+  }
+  $('taskGroups').replaceChildren(...out);
+}
+
+async function toggleTask(key, checked) {
+  const [noteId, index] = key.split(':');
+  const note = notes.find(n => n.id === noteId);
+  if (!note) return;
+  note.html = withTaskChecked(note, Number(index), checked);
+  note.updatedAt = Date.now();
+  await putNote(note);
+  renderAll();
+}
+
+// ---------- files page ----------
+
+let fileMode = 'all';
+
+// attachment id -> the note that uses it (attachments of deleted notes are left out)
+function fileRefs() {
+  const refs = new Map();
+  for (const n of notes) {
+    for (const m of (n.html || '').matchAll(/att:([a-z0-9]+)/g)) if (!refs.has(m[1])) refs.set(m[1], n.id);
+  }
+  return refs;
+}
+
+async function renderFilesPage() {
+  const refs = fileRefs();
+  const atts = (await getAllAttachments()).filter(a => refs.has(a.id));
+  for (const b of document.querySelectorAll('[data-filemode]')) b.classList.toggle('on', b.dataset.filemode === fileMode);
+  const isImg = a => (a.type || '').startsWith('image/');
+  const shown = atts.filter(a => fileMode === 'all' || (fileMode === 'image') === isImg(a))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  $('fileCount').textContent = `${shown.length}件`;
+  const tiles = await Promise.all(shown.map(async a => {
+    const url = await attachmentUrl(a.id);
+    const note = notes.find(n => n.id === refs.get(a.id));
+    const tile = document.createElement('div');
+    tile.className = 'file-tile';
+    tile.innerHTML = '<button class="file-thumb"></button><div class="file-meta"><a class="file-name ellipsis" target="_blank" rel="noopener"></a><button class="link-plain file-note ellipsis"></button></div>';
+    const thumb = tile.querySelector('.file-thumb');
+    thumb.dataset.note = note.id;
+    if (isImg(a)) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.loading = 'lazy';
+      img.alt = '';
+      thumb.append(img);
+    } else {
+      thumb.textContent = (a.name?.split('.').pop() || a.type.split('/').pop() || 'FILE').toUpperCase().slice(0, 5);
+    }
+    const link = tile.querySelector('.file-name');
+    link.href = url;
+    link.textContent = a.name || (isImg(a) ? '画像' : 'ファイル');
+    if (a.name) link.download = a.name;
+    const nb = tile.querySelector('.file-note');
+    nb.textContent = displayTitle(note);
+    nb.dataset.note = note.id;
+    return tile;
+  }));
+  if (view !== 'files') return; // navigated away while loading
+  $('fileGrid').replaceChildren(...(tiles.length ? tiles
+    : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ノートに画像やファイルを入れると、ここに並びます' })]));
 }
 
 function renderList() {
@@ -370,6 +485,8 @@ function renderAll() {
   renderSidebar();
   if (view === 'home') renderHome();
   if (view === 'notebooks') renderNotebooksPage();
+  if (view === 'tasks') renderTasksPage();
+  if (view === 'files') renderFilesPage();
   renderList();
   renderTabs();
   renderCrumbs();
@@ -443,7 +560,7 @@ function go(hash) {
 async function doRoute() {
   const hash = location.hash;
   const [, id, mode] = hash.match(/^#n\/([a-z0-9]+)(?:\/(stage))?$/) || [];
-  view = id ? 'note' : hash === '#notebooks' ? 'notebooks' : hash === '#list' ? 'list' : 'home';
+  view = id ? 'note' : ({ '#notebooks': 'notebooks', '#list': 'list', '#tasks': 'tasks', '#files': 'files' })[hash] || 'home';
   document.body.dataset.view = view;
   if (id !== currentId) {
     await leaveCurrent();
@@ -552,7 +669,18 @@ $('newTabBtn').onclick = () => newNote();
 $('menuBtn').onclick = openDrawer;
 $('scrim').onclick = closeDrawer;
 
-for (const id of ['sidebar', 'homeView', 'notebooksView']) $(id).addEventListener('click', handleNav);
+for (const id of ['sidebar', 'homeView', 'notebooksView', 'tasksView', 'filesView']) $(id).addEventListener('click', handleNav);
+for (const id of ['homeView', 'tasksView']) {
+  $(id).addEventListener('change', e => { if (e.target.dataset.task) toggleTask(e.target.dataset.task, e.target.checked); });
+}
+$('tasksView').addEventListener('click', e => {
+  const m = e.target.closest('[data-taskmode]')?.dataset.taskmode;
+  if (m) { taskMode = m; renderTasksPage(); }
+});
+$('filesView').addEventListener('click', e => {
+  const m = e.target.closest('[data-filemode]')?.dataset.filemode;
+  if (m) { fileMode = m; renderFilesPage(); }
+});
 $('newNotebookBtn').onclick = () => createNotebook({ open: false });
 
 $('pinNotebookBtn').onclick = async () => {
@@ -644,6 +772,21 @@ $('moreBtn').onclick = e => {
       Object.assign(menuItem('削除', () => $('deleteBtn').click()), { className: 'menu-item danger' }),
     );
   });
+};
+
+// Any file (PDF scores, audio...) goes in as an "添付: name" link; images keep going inline.
+$('fileInput').onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  for (const f of files) {
+    if (f.type.startsWith('image/')) { insertImageFiles([f]); continue; }
+    const id = await storeBlob(f, f.name);
+    const href = await attachmentUrl(id);
+    editor.chain().focus().insertContent({
+      type: 'paragraph',
+      content: [{ type: 'text', text: `添付: ${f.name}`, marks: [{ type: 'link', attrs: { href } }] }],
+    }).run();
+  }
 };
 
 $('imageInput').onchange =e => { insertImageFiles(e.target.files); e.target.value = ''; };

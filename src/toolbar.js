@@ -1,4 +1,6 @@
-// Formatting toolbar + the popovers it opens (insert menu, text color, highlight).
+// Formatting toolbar + the popovers it opens (insert menu, due date, text color, highlight).
+import { addDays as offsetDay, fmtDue } from './tasks.js';
+
 const $ = id => document.getElementById(id);
 
 // Mid-saturation so they read on both the dark and light theme.
@@ -71,7 +73,7 @@ export function setupToolbar(editor, insert) {
   bar.addEventListener('mousedown', e => {
     if (e.target.closest('button')) e.preventDefault();
   });
-  $('popover').addEventListener('mousedown', e => e.preventDefault());
+  $('popover').addEventListener('mousedown', e => { if (!e.target.closest('input')) e.preventDefault(); });
 
   bar.addEventListener('click', e => {
     const b = e.target.closest('button');
@@ -84,12 +86,31 @@ export function setupToolbar(editor, insert) {
         p.classList.remove('swatches');
         p.append(
           menuItem('画像', insert.image),
+          menuItem('ファイル(PDFなど)', insert.file),
           menuItem('表', () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()),
           menuItem('YouTube動画', insert.youtube),
           menuItem('リンク', insert.link),
           menuItem('チェックリスト', () => editor.chain().focus().toggleTaskList().run()),
           menuItem('引用', () => editor.chain().focus().toggleBlockquote().run()),
           menuItem('区切り線', () => editor.chain().focus().setHorizontalRule().run()),
+        );
+      });
+    }
+    if (pop === 'due') {
+      showPopover(b, p => {
+        p.classList.remove('swatches');
+        const setDue = due => editor.chain().focus().updateAttributes('taskItem', { due }).run();
+        const input = document.createElement('input');
+        input.type = 'date';
+        input.className = 'due-input';
+        input.value = editor.getAttributes('taskItem').due || '';
+        input.onchange = () => { if (input.value) { closePopover(); setDue(input.value); } };
+        p.append(
+          input,
+          menuItem('今日', () => setDue(offsetDay(0))),
+          menuItem('明日', () => setDue(offsetDay(1))),
+          menuItem('来週', () => setDue(offsetDay(7))),
+          menuItem('期限を外す', () => setDue(null)),
         );
       });
     }
@@ -127,6 +148,11 @@ export function setupToolbar(editor, insert) {
     $('colorMark').style.setProperty('--c', editor.getAttributes('textStyle').color || 'currentColor');
     $('hlMark').style.setProperty('--c', editor.getAttributes('highlight').color || 'transparent');
     $('tableTools').hidden = !editor.isActive('table');
+    const inTask = editor.isActive('taskItem');
+    $('dueBtn').hidden = !inTask;
+    const due = inTask && editor.getAttributes('taskItem').due;
+    $('dueBtn').textContent = due ? `期限 ${fmtDue(due)}` : '期限';
+    $('dueBtn').classList.toggle('on', !!due);
   };
   editor.on('transaction', sync);
   sync();

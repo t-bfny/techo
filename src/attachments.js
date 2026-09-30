@@ -16,6 +16,8 @@ async function urlFor(id) {
   return url;
 }
 
+export const attachmentUrl = urlFor;
+
 export async function resolveHtml(html) {
   const ids = [...new Set([...html.matchAll(/att:([a-z0-9]+)/g)].map(m => m[1]))];
   await Promise.all(ids.map(urlFor));
