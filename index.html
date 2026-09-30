@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16171a">
+  <title>techo</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="listPane">
+      <header class="bar">
+        <input id="search" type="search" placeholder="検索" autocomplete="off">
+        <button id="newBtn">新規</button>
+      </header>
+      <ul id="noteList"></ul>
+      <footer class="bar small">
+        <span id="count"></span>
+        <span class="grow"></span>
+        <button id="exportBtn">書き出し</button>
+        <button id="importBtn">読み込み</button>
+        <input id="importInput" type="file" accept="application/json" hidden>
+      </footer>
+    </aside>
+
+    <main id="editorPane">
+      <p id="emptyState">メモを選ぶか、新規で作成</p>
+      <div id="editorWrap" hidden>
+        <header class="bar">
+          <button id="backBtn" class="narrow-only">一覧</button>
+          <span class="grow"></span>
+          <span id="tableTools" hidden>
+            <button data-table="addRowAfter">行+</button>
+            <button data-table="addColumnAfter">列+</button>
+            <button data-table="deleteRow">行-</button>
+            <button data-table="deleteColumn">列-</button>
+          </span>
+          <button id="imageBtn">画像</button>
+          <input id="imageInput" type="file" accept="image/*" multiple hidden>
+          <button id="tableBtn">表</button>
+          <button id="ytBtn">動画</button>
+          <button id="stageBtn">本番</button>
+          <button id="deleteBtn" class="danger">削除</button>
+        </header>
+        <div class="scroll">
+          <input id="titleInput" placeholder="タイトル" autocomplete="off">
+          <div id="editor"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <section id="stage" hidden>
+    <header class="bar">
+      <button id="stageExit">戻る</button>
+      <span class="grow"></span>
+      <button id="fontDown">A-</button>
+      <button id="fontUp">A+</button>
+    </header>
+    <div class="scroll"><article id="stageBody"></article></div>
+  </section>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
