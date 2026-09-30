@@ -6,7 +6,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "deploy": "vite build && wrangler pages deploy dist --project-name techo --branch main --commit-dirty=true"
+    "deploy": "vite build && wrangler deploy"
   },
   "keywords": [],
   "author": "",

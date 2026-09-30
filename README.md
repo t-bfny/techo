@@ -31,7 +31,7 @@ npm run preview  # ビルド結果の確認
 
 ## この先
 
-1. スマホからHTTPSで開けるように公開(PWAはHTTPS必須)
+1. ~~HTTPS公開~~ → https://techo.t-bfny.workers.dev (`npm run deploy`)
 2. Evernoteの `.enex` 取り込み
 3. Google Drive同期
 4. タブレット: 楽譜PDFとメモの並べ表示
