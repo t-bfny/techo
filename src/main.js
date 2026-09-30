@@ -23,6 +23,9 @@ import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './tool
 
 const $ = id => document.getElementById(id);
 
+// Outline pushpin shown next to notes pinned to the top of their notebook.
+const PIN_ICON = '<svg class="pin" viewBox="0 0 16 16" aria-label="ピン留め"><path d="M10.5 1.5l4 4-2 1-2.5 2.5.5 3.5-1.5 1.5-3-3-3.5 3.5-.5-.5L5.5 10.5l-3-3L4 6l3.5.5L10 4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+
 let notes = [];          // in-memory copy for list + search (1000 notes fits easily); excludes trash
 let trashed = [];        // notes with deletedAt, kept for TRASH_DAYS
 let notebooks = [];
@@ -285,6 +288,18 @@ async function moveNotes(ids, notebookId) {
   for (const n of moved) { n.notebookId = notebookId; await putNote(n); }
   pushUndo(`${moved.length}件を「${notebookName(notebookId)}」へ移動しました`, async () => {
     for (const [n, prev] of before) { n.notebookId = prev; await putNote(n); }
+    renderAll();
+  });
+  renderAll();
+}
+
+// Pin to the top of its notebook (Evernote's "pin"), separate from shortcuts (note.pinned).
+async function setPinTop(ids, value) {
+  const changed = notes.filter(n => ids.includes(n.id) && !!n.pinTop !== value);
+  if (!changed.length) return;
+  for (const n of changed) { n.pinTop = value; await putNote(n); }
+  pushUndo(`${changed.length}件を${value ? 'ピン留め' : 'ピン留めから外'}しました`, async () => {
+    for (const n of changed) { n.pinTop = !value; await putNote(n); }
     renderAll();
   });
   renderAll();
@@ -653,7 +668,9 @@ function renderBulkBar() {
 function renderList() {
   const terms = $('search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const scoped = notes.filter(inFilter);
-  const shown = sortNotes(scoped.filter(n => matches(n, terms)));
+  const sorted = sortNotes(scoped.filter(n => matches(n, terms)));
+  // Inside a notebook, pinned notes stay on top whatever the sort; the rest follow in order.
+  const shown = filter.type === 'notebook' ? [...sorted.filter(n => n.pinTop), ...sorted.filter(n => !n.pinTop)] : sorted;
   $('sortSelect').value = sort.key;
   $('sortDir').textContent = sort.dir === 'asc' ? '↑' : '↓';
   $('sortDir').title = sort.dir === 'asc' ? '昇順(古い・小さい順)' : '降順(新しい・大きい順)';
@@ -675,7 +692,7 @@ function renderList() {
     if (selected.has(n.id)) li.classList.add('selected');
     const lines = (n.text || '').split('\n').map(s => s.trim()).filter(Boolean);
     const snippet = (n.title ? lines : lines.slice(1)).join(' ').slice(0, 80);
-    li.innerHTML = '<div class="row"><span class="t"></span><span class="d"></span></div><div class="s"></div><div class="nb"></div>';
+    li.innerHTML = `<div class="row"><span class="t"></span>${n.pinTop ? PIN_ICON : ''}<span class="d"></span></div><div class="s"></div><div class="nb"></div>`;
     li.querySelector('.t').textContent = displayTitle(n);
     li.querySelector('.d').textContent = fmtDate(n.updatedAt);
     li.querySelector('.s').textContent = snippet;
@@ -1007,6 +1024,7 @@ function noteMenu(x, y, ids, extra = []) {
   if (!list.length) return;
   const one = list.length === 1 ? list[0] : null;
   const allPinned = list.every(n => n.pinned);
+  const allTop = list.every(n => n.pinTop);
   showMenuAt(x, y, p => p.append(
     ...(one ? [
       menuItem('開く', () => openNote(one.id)),
@@ -1015,6 +1033,7 @@ function noteMenu(x, y, ids, extra = []) {
     ] : [menuLabel(`${list.length}件を選択中`)]),
     ...extra,
     menuSep(),
+    menuItem(allTop ? 'ピン留めを外す' : 'ピン留め', () => setPinTop(ids, !allTop)),
     menuItem(allPinned ? 'ショートカットから外す' : 'ショートカットに追加', () => setPinned(ids, !allPinned)),
     menuItem('ノートブックへ移動…', () => showMenuAt(x, y, q => q.append(
       menuLabel('移動先'),
