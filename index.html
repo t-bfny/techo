@@ -20,10 +20,10 @@
   <div id="app">
     <nav id="sidebar">
       <div class="side-top">
-        <button id="newBtn" class="primary">新規ノート</button>
+        <button id="newBtn" class="primary">新規作成</button>
       </div>
       <div class="side-scroll">
-        <button class="side-item" data-go="home"><span>ホーム画面</span></button>
+        <button class="side-item home-item" data-go="home" title="ホーム画面" aria-label="ホーム画面"><svg class="home-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 9.2 10 3.5l7 5.7V16a1 1 0 0 1-1 1h-3.6v-4.6H7.6V17H4a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>
         <button class="side-head link" data-filter="shortcuts"><span>ショートカット</span></button>
         <div id="shortcutList"></div>
         <div class="side-head"><span>最近のノート</span></div>
@@ -88,7 +88,7 @@
         <button class="drawer-only" data-drawer>メニュー</button>
         <span class="grow"></span>
         <button id="themeBtn" title="ライト/ダークを切り替え"></button>
-        <button class="primary" data-new>新規ノート</button>
+        <button class="primary" data-new>新規作成</button>
       </header>
       <div class="page-body">
         <div class="banner">

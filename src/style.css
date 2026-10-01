@@ -812,3 +812,7 @@ input, select, #search { border-color: var(--border-strong); }
   -webkit-box-orient: vertical;
   line-height: 1.5;
 }
+
+/* sidebar home button: house icon only */
+.home-item { padding: 7px 10px; }
+.home-icon { width: 21px; height: 21px; display: block; }
