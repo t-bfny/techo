@@ -819,3 +819,9 @@ input, select, #search { border-color: var(--border-strong); }
 
 /* No focus ring on text-entry areas (the editor, title, search): the caret already shows focus. */
 .tiptap:focus-visible, .ProseMirror:focus, input:focus-visible, textarea:focus-visible { outline: none; }
+
+/* sidebar top row: square home button + 新規作成 */
+.side-top { display: flex; gap: 8px; align-items: stretch; }
+.side-top .primary { flex: 1; width: auto; }
+.home-btn { width: 42px; flex-shrink: 0; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+.home-btn.active { background: var(--select-bg); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); box-shadow: none; }

@@ -468,7 +468,7 @@ function renderSidebar() {
   $('countFiles').textContent = fileRefs().size || '';
   $('countTrash').textContent = trashed.length || '';
   for (const g of ['tasks', 'files', 'trash']) document.querySelector(`.side-item[data-go="${g}"]`).classList.toggle('active', view === g);
-  document.querySelector('.side-item[data-go="home"]').classList.toggle('active', view === 'home');
+  document.querySelector('.home-btn').classList.toggle('active', view === 'home');
   document.querySelector('.side-item[data-filter="all"]').classList.toggle('active', onList && filter.type === 'all');
   document.querySelector('.side-head [data-go="notebooks"]').classList.toggle('active', view === 'notebooks');
 
