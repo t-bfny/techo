@@ -11,15 +11,27 @@
 ::-webkit-scrollbar-thumb:hover { background: rgba(120, 120, 120, 0.7); }
 
 /* Palette follows clock-widget's Frost Gray, made opaque for a full-screen app. */
+/* Dark: a layered near-black (sidebar darkest → list → editor → floating menus lightest),
+   slightly cool, with hairline borders, a 1px top highlight + soft shadow on raised
+   surfaces, softened white text and one real accent color. */
 :root {
-  --bg: #16171a;
-  --sidebar: #121316;
-  --panel: #1e2024;
-  --panel-2: #26282d;
-  --border: rgba(255, 255, 255, 0.10);
-  --text: #eef0f2;
-  --text-dim: rgba(238, 240, 242, 0.56);
-  --accent: #c7ccd4;
+  --bg: #141518;
+  --sidebar: #0e0f11;
+  --panel: #1a1b1f;
+  --panel-2: #24262b;
+  --float: #26282e;
+  --border: rgba(255, 255, 255, 0.065);
+  --border-strong: rgba(255, 255, 255, 0.11);
+  --text: #e6e7ea;
+  --text-dim: rgba(230, 231, 234, 0.50);
+  --accent: #8fb4ff;
+  --select-bg: rgba(143, 180, 255, 0.11);
+  --hover: rgba(255, 255, 255, 0.035);
+  --highlight: rgba(255, 255, 255, 0.055);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.28);
+  --btn-bg: linear-gradient(180deg, #2b2d33, #23252a);
+  --btn-bg-hover: linear-gradient(180deg, #31343a, #282a30);
+  --on-accent: #0d1220;
   --danger: #f08a8a;
   --radius: 10px;
   --font: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
@@ -39,6 +51,15 @@
     --text-dim: rgba(29, 30, 32, 0.55);
     --accent: #3f4652;
     --danger: #c43d3d;
+    --float: #ffffff;
+    --border-strong: rgba(0, 0, 0, 0.16);
+    --select-bg: rgba(63, 70, 82, 0.08);
+    --hover: rgba(0, 0, 0, 0.035);
+    --highlight: rgba(255, 255, 255, 0.8);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 22px rgba(0, 0, 0, 0.06);
+    --btn-bg: linear-gradient(180deg, #ffffff, #f2f2ef);
+    --btn-bg-hover: linear-gradient(180deg, #ffffff, #ebebe7);
+  --on-accent: #ffffff;
     color-scheme: light;
   }
 }
@@ -52,6 +73,15 @@
   --text-dim: rgba(29, 30, 32, 0.55);
   --accent: #3f4652;
   --danger: #c43d3d;
+  --float: #ffffff;
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --select-bg: rgba(63, 70, 82, 0.08);
+  --hover: rgba(0, 0, 0, 0.035);
+  --highlight: rgba(255, 255, 255, 0.8);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 22px rgba(0, 0, 0, 0.06);
+  --btn-bg: linear-gradient(180deg, #ffffff, #f2f2ef);
+  --btn-bg-hover: linear-gradient(180deg, #ffffff, #ebebe7);
+  --on-accent: #ffffff;
   color-scheme: light;
 }
 
@@ -667,3 +697,118 @@ body:is([data-view="home"], [data-view="notebooks"], [data-view="tasks"], [data-
 
 /* pinned-to-top marker in the note list */
 #noteList .pin { width: 13px; height: 13px; flex-shrink: 0; color: var(--accent); align-self: center; }
+
+/* ---------- surfaces & depth (both themes, driven by the tokens above) ---------- */
+
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+/* Buttons: a faint top-lit gradient with a 1px inner highlight instead of a flat fill. */
+button {
+  background: var(--btn-bg);
+  border-color: var(--border-strong);
+  box-shadow: inset 0 1px 0 var(--highlight), 0 1px 1px rgba(0, 0, 0, 0.18);
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+button:hover:not(:disabled) { background: var(--btn-bg-hover); border-color: var(--border-strong); }
+button.primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 100%, white 10%), var(--accent));
+  color: var(--on-accent);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+button.on, #toolbar button.on, .seg button.on {
+  background: var(--select-bg);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: none;
+}
+/* Flat (ghost) buttons stay flat. */
+#toolbar button, .side-item, .side-head, .tab-close, .tab-add, .menu-item, .link-plain, .caret,
+.seg button, .card, .file-thumb, #toastUndo, .crumbs select { box-shadow: none; }
+#toolbar button, .side-item, .tab-close, .tab-add, .menu-item, .seg button, .caret { background: none; }
+#toolbar button:hover:not(:disabled), .side-item:hover, .menu-item:hover { background: var(--hover); }
+#toolbar button.strong { background: var(--btn-bg); box-shadow: inset 0 1px 0 var(--highlight); }
+:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 1px; }
+
+input, select, #search { border-color: var(--border-strong); }
+#search { background: var(--sidebar); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25); }
+#search:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+
+/* Selection: an accent wash plus a thin accent bar, like Evernote's selected card. */
+.side-item.active { background: var(--select-bg); color: var(--text); }
+.side-item.active .n { color: var(--accent); }
+#noteList li { border-bottom-color: var(--border); transition: background-color 0.1s; }
+#noteList li:hover { background: var(--hover); }
+#noteList li.active { background: var(--select-bg); box-shadow: inset 2px 0 0 var(--accent); }
+#noteList li.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+#noteList .t { letter-spacing: 0.01em; }
+
+/* Raised surfaces: top highlight + soft drop shadow. */
+.card, .rows, .file-tile, .nb-table, .banner, #bulkBar {
+  border-color: var(--border);
+  box-shadow: inset 0 1px 0 var(--highlight), var(--shadow);
+}
+.card { background: linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 60%, var(--panel)), var(--panel)); transition: transform 0.12s, border-color 0.12s; }
+.card:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); transform: translateY(-1px); }
+#popover {
+  background: color-mix(in srgb, var(--float) 92%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  border-color: var(--border-strong);
+  box-shadow: inset 0 1px 0 var(--highlight), 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Tabs sit in the darkest strip; the active one lifts into the editor's color. */
+#tabs { background: var(--sidebar); }
+.tab.active { background: var(--bg); box-shadow: inset 0 2px 0 var(--accent), inset 1px 0 0 var(--border), inset -1px 0 0 var(--border); }
+
+/* Hairlines between panes instead of heavy borders. */
+#sidebar, #listPane { border-right-color: var(--border); }
+.bar { border-bottom-color: var(--border); }
+
+.page-h { letter-spacing: 0.02em; }
+
+/* ---------- floating panels (tablet / PC) ----------
+   The darkest color is the base; list, editor and pages sit on it as rounded panels with
+   a small gutter, the way Resolve and Evernote separate their workspaces. */
+@media (min-width: 761px) {
+  body { background: var(--sidebar); }
+  #app { padding: 6px; gap: 6px; background: var(--sidebar); }
+  #sidebar { border-right: 0; background: transparent; }
+  #listPane, #editorPane, .page {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 var(--highlight), var(--shadow);
+  }
+  #listPane { background: var(--panel); }
+  #editorPane, .page { background: var(--bg); }
+  #tabs { background: var(--panel); border-bottom-color: var(--border); }
+  .tab.active { background: var(--bg); }
+}
+@media (min-width: 761px) and (max-width: 1099px) {
+  #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); }
+}
+
+/* Note list as cards: rounded rows with breathing room; the open note gets an accent ring. */
+#noteList { padding: 6px; }
+#noteList li {
+  margin-bottom: 4px;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  border-bottom: 1px solid transparent;
+}
+#noteList li.active {
+  background: var(--select-bg);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: none;
+}
+#noteList li.selected { border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+#noteList .t { font-size: 14.5px; }
+#noteList .s {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.5;
+}
