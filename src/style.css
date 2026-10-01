@@ -816,3 +816,6 @@ input, select, #search { border-color: var(--border-strong); }
 /* sidebar home button: house icon only */
 .home-item { padding: 7px 10px; }
 .home-icon { width: 21px; height: 21px; display: block; }
+
+/* No focus ring on text-entry areas (the editor, title, search): the caret already shows focus. */
+.tiptap:focus-visible, .ProseMirror:focus, input:focus-visible, textarea:focus-visible { outline: none; }
