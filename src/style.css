@@ -825,3 +825,47 @@ input, select, #search { border-color: var(--border-strong); }
 .side-top .primary { flex: 1; width: auto; }
 .home-btn { width: 42px; flex-shrink: 0; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
 .home-btn.active { background: var(--select-bg); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); box-shadow: none; }
+
+/* ---------- print ----------
+   Only #printArea is printed: black on white whatever the app theme, one note per page. */
+#printArea { display: none; }
+@media print {
+  @page { margin: 16mm 14mm; }
+  :root { color-scheme: light !important; background: #fff !important; }
+  html, body { height: auto !important; background: #fff !important; }
+  body > *:not(#printArea) { display: none !important; }
+  #printArea {
+    display: block;
+    color: #111;
+    font-family: var(--font);
+    font-size: 11pt;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-note + .print-note { break-before: page; }
+  #printArea h1 { font-size: 18pt; line-height: 1.35; margin: 0 0 2pt; }
+  .print-meta { font-size: 9pt; color: #777; margin-bottom: 14pt; padding-bottom: 6pt; border-bottom: 0.5pt solid #ccc; }
+  #printArea h2 { font-size: 14pt; margin: 16pt 0 6pt; break-after: avoid; }
+  #printArea h3 { font-size: 12pt; margin: 12pt 0 4pt; break-after: avoid; }
+  #printArea p { margin: 0 0 6pt; }
+  #printArea img { max-width: 100%; height: auto; break-inside: avoid; margin: 6pt 0; }
+  #printArea a { color: #111; }
+  #printArea table { border-collapse: collapse; margin: 8pt 0; break-inside: avoid; }
+  #printArea :is(td, th) { border: 0.5pt solid #999; padding: 3pt 6pt; vertical-align: top; }
+  #printArea :is(td, th) p { margin: 0; }
+  #printArea pre { background: #f3f3f3; padding: 8pt; white-space: pre-wrap; font-size: 9.5pt; }
+  #printArea blockquote { margin: 6pt 0; padding-left: 10pt; border-left: 2pt solid #ccc; color: #555; }
+  #printArea hr { border: 0; border-top: 0.5pt solid #ccc; margin: 12pt 0; }
+  #printArea ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+  #printArea li[data-type="taskItem"], #printArea ul[data-type="taskList"] > li { display: flex; gap: 6pt; }
+  #printArea ul[data-type="taskList"] label { display: none; }
+  #printArea ul[data-type="taskList"] > li::before { content: '☐'; }
+  #printArea ul[data-type="taskList"] > li[data-checked="true"]::before { content: '☑'; }
+  #printArea ul[data-type="taskList"] > li > :is(div, p) { flex: 1; margin: 0; }
+  #printArea ul[data-type="taskList"] > li > div > p { margin: 0; }
+  #printArea li[data-checked="true"] > :is(div, p) { color: #888; text-decoration: line-through; }
+  #printArea li[data-due]::after { content: attr(data-due); font-size: 9pt; color: #777; }
+  .print-yt { color: #555; font-size: 10pt; }
+}

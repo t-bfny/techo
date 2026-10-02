@@ -1042,6 +1042,7 @@ function noteMenu(x, y, ids, extra = []) {
     menuSep(),
     menuItem('書き出し(HTML)', () => exportNotes(list, 'html')),
     menuItem('書き出し(techo形式 .json)', () => exportNotes(list, 'json')),
+    menuItem(one ? '印刷' : `${list.length}件を印刷`, () => printNotes(list)),
     menuSep(),
     danger(menuItem(one ? '削除' : `${list.length}件を削除`, () => trashNotes(ids))),
   ));
@@ -1056,10 +1057,51 @@ function notebookMenu(x, y, nb) {
     menuSep(),
     menuItem('書き出し(HTML)', () => exportNotebook(nb, 'html')),
     menuItem('書き出し(techo形式 .json)', () => exportNotebook(nb, 'json')),
+    menuItem('印刷', () => printNotes(sortNotes(notes.filter(n => n.notebookId === nb.id)))),
     menuSep(),
     danger(menuItem('削除', () => removeNotebook(nb))),
   ));
 }
+
+// ---------- print ----------
+// Copies the notes into #printArea, which is the only thing shown under @media print.
+
+async function printNotes(list) {
+  if (!list.length) return;
+  if (saveTimer) await saveNow();
+  const area = $('printArea');
+  const bodies = await Promise.all(list.map(n => resolveHtml(n.html || '')));
+  area.replaceChildren(...list.map((n, i) => {
+    const art = document.createElement('article');
+    art.className = 'print-note';
+    art.innerHTML = '<h1></h1><div class="print-meta"></div>' + bodies[i];
+    art.querySelector('h1').textContent = displayTitle(n);
+    art.querySelector('.print-meta').textContent = `${notebookName(n.notebookId)} · ${new Date(n.updatedAt).toLocaleDateString('ja-JP')}`;
+    return art;
+  }));
+  // Paper can't play video: print the YouTube link instead of the player.
+  for (const box of area.querySelectorAll('div[data-youtube-video]')) {
+    const src = box.querySelector('iframe')?.getAttribute('src') || '';
+    const id = src.match(/embed\/([\w-]+)/)?.[1];
+    const p = document.createElement('p');
+    p.className = 'print-yt';
+    p.textContent = `YouTube: ${id ? `https://www.youtube.com/watch?v=${id}` : src}`;
+    box.replaceWith(p);
+  }
+  await Promise.all([...area.querySelectorAll('img')].map(img =>
+    img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
+  window.print();
+}
+window.addEventListener('afterprint', () => $('printArea').replaceChildren());
+
+// Ctrl+P prints notes (not the app screen), even while typing in a note.
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'p') return;
+  const list = selected.size ? notes.filter(n => selected.has(n.id)) : notes.filter(n => n.id === currentId);
+  if (!list.length) return;
+  e.preventDefault();
+  printNotes(list);
+});
 
 // Text areas keep the browser's own menu (copy, paste, spellcheck); everything else gets ours.
 document.addEventListener('contextmenu', e => {
@@ -1175,6 +1217,7 @@ $('moreBtn').onclick = e => {
     p.classList.remove('swatches');
     p.append(
       menuItem(note.pinned ? 'ショートカットから外す' : 'ショートカットに追加', () => $('pinBtn').click()),
+      menuItem('印刷', () => printNotes([note])),
       Object.assign(menuItem('削除', () => $('deleteBtn').click()), { className: 'menu-item danger' }),
     );
   });
