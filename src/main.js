@@ -12,7 +12,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 
 import {
   uid, getAllAttachments, getAllNotes, putNote, deleteNote, getAllNotebooks, putNotebook, deleteNotebook, requestPersist,
-  deleteAttachment,
+  deleteAttachment, getNote, channel, TAB_ID,
 } from './db.js';
 import { resolveHtml, unresolveHtml, storeImage, storeBlob, attachmentUrl, attachmentLink } from './attachments.js';
 import { DueTaskItem, allTasks, withTaskChecked, groupOpenTasks, fmtDue, isoDay } from './tasks.js';
@@ -330,18 +330,52 @@ function scheduleSave() {
   saveTimer = setTimeout(saveNow, 500);
 }
 
-async function saveNow() {
+// The version of the open note that the editor started from (or last saved). If the stored
+// copy is newer and was written by another tab, saving would silently drop that tab's work.
+let editorBase = null;   // { id, updatedAt }
+const unsavedIds = new Set();  // notes whose last save failed; their edits live only in memory
+
+async function saveNow({ force = false } = {}) {
   clearTimeout(saveTimer);
   saveTimer = null;
   const note = findNote(currentId);
   if (!note) return;
+  if (!force && editorBase?.id === note.id) {
+    const stored = await getNote(note.id).catch(() => null);
+    if (stored && stored.savedBy !== TAB_ID && stored.updatedAt > editorBase.updatedAt) {
+      showConflict();
+      return;
+    }
+  }
   note.title = $('titleInput').value.trim();
   note.html = unresolveHtml(editor.getHTML());
   note.text = editor.getText();
   note.updatedAt = Date.now();
-  await putNote(note);
+  try {
+    await putNote(note);
+    editorBase = { id: note.id, updatedAt: note.updatedAt };
+    unsavedIds.delete(note.id);
+    if (!unsavedIds.size) hideNotice('error');
+  } catch {
+    unsavedIds.add(note.id); // the in-memory copy keeps the edits; the notice offers a retry
+  }
   renderAll();
 }
+
+async function retryUnsaved() {
+  hideNotice('error');
+  for (const id of [...unsavedIds]) {
+    const n = findNote(id);
+    if (!n) { unsavedIds.delete(id); continue; }
+    try { await putNote(n); unsavedIds.delete(id); } catch { return; } // the failure shows the notice again
+  }
+  showToast('保存しました', false);
+}
+
+// Closing the tab with unsaved edits would lose them.
+window.addEventListener('beforeunload', e => {
+  if (unsavedIds.size || saveTimer) { if (saveTimer) saveNow(); if (unsavedIds.size) { e.preventDefault(); e.returnValue = ''; } }
+});
 
 const isBlank = n => !n.title && !n.text?.trim() && !/<(img|iframe|table)/.test(n.html || '');
 
@@ -791,6 +825,10 @@ async function showNote(id) {
   // Fresh state = fresh undo history, so undo can never bring back the previous note.
   const { doc, plugins } = editor.state;
   editor.view.updateState(EditorState.create({ doc, plugins }));
+  editorBase = { id, updatedAt: note.updatedAt };
+  hideNotice('conflict');
+  hideNotice('tab');
+  channel?.postMessage({ type: 'who', id, from: TAB_ID }); // is this note open in another tab?
   loading = false;
   $('emptyState').hidden = true;
   $('editorWrap').hidden = false;
@@ -1391,7 +1429,11 @@ $('deleteBtn').onclick = () => {
   if (t) deleteTemplate(t); else if (currentId) trashNotes([currentId]);
 };
 
-$('exportBtn').onclick = () => exportAll();
+$('exportBtn').onclick = async () => {
+  await exportAll();
+  store(BACKUP_KEY, Date.now());
+  hideNotice('backup');
+};
 $('importBtn').onclick = () => $('importInput').click();
 $('importInput').onchange = async e => {
   const file = e.target.files[0];
@@ -1483,6 +1525,114 @@ window.addEventListener('hashchange', route);
 
 // ---------- start ----------
 
+// ---------- notices: a bar that stays until dealt with (the toast is for undo) ----------
+// One at a time; a more serious one replaces a lighter one, never the other way round.
+
+const NOTICE_RANK = { backup: 1, storage: 2, tab: 3, conflict: 4, error: 5 };
+let noticeKind = null;
+
+function showNotice(kind, message, actions = []) {
+  if (!$('notice').hidden && NOTICE_RANK[noticeKind] > NOTICE_RANK[kind]) return;
+  noticeKind = kind;
+  $('notice').dataset.kind = kind;
+  $('noticeMsg').textContent = message;
+  [$('noticeA'), $('noticeB')].forEach((b, i) => {
+    const a = actions[i];
+    b.hidden = !a;
+    if (a) { b.textContent = a[0]; b.onclick = a[1]; }
+  });
+  $('notice').hidden = false;
+}
+
+function hideNotice(kind) {
+  if (kind && noticeKind !== kind) return;
+  $('notice').hidden = true;
+  noticeKind = null;
+}
+$('noticeClose').onclick = () => hideNotice();
+
+window.addEventListener('techo:write-failed', e => {
+  const quota = e.detail?.name === 'QuotaExceededError';
+  showNotice('error',
+    quota ? '端末の空き容量が足りず、保存できませんでした。ゴミ箱を空にするか不要な画像を消してから「もう一度保存」を押してください。'
+      : `保存できませんでした(${e.detail?.name || 'エラー'})。「もう一度保存」を試し、だめなら書き出しでバックアップを取ってください。`,
+    [['もう一度保存', () => (unsavedIds.size ? retryUnsaved() : saveNow())], ['書き出し', () => exportAll()]]);
+});
+
+async function checkStorage() {
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    if (quota && usage / quota > 0.9) {
+      showNotice('storage', `端末の保存容量が残りわずかです(${Math.round(usage / quota * 100)}%使用)。このままだと保存に失敗することがあります。`,
+        [['ゴミ箱を開く', () => { hideNotice('storage'); go('trash'); }]]);
+    }
+  } catch { /* estimate unsupported */ }
+}
+
+// ---------- backup reminder ----------
+
+const BACKUP_KEY = 'techo.lastBackup';
+const SNOOZE_KEY = 'techo.backupSnooze';
+
+function checkBackupReminder() {
+  if (!notes.length || Date.now() < Number(load(SNOOZE_KEY, 0))) return;
+  const last = Number(load(BACKUP_KEY, 0));
+  const days = last ? Math.floor((Date.now() - last) / DAY) : null;
+  if (days !== null && days < 7) return;
+  const iosBrowser = /iPhone|iPad|iPod/.test(navigator.userAgent)
+    && !matchMedia('(display-mode: standalone)').matches && !navigator.standalone;
+  showNotice('backup',
+    (days === null ? 'まだ一度も書き出し(バックアップ)をしていません。' : `最後の書き出しから${days}日たちました。`)
+    + 'メモはこの端末のブラウザの中にしかありません。'
+    + (iosBrowser ? 'iPhoneでは、ホーム画面に追加しないまま7日間開かないとデータが消えることがあります。' : ''),
+    [['書き出し', () => $('exportBtn').click()], ['あとで', () => { store(SNOOZE_KEY, Date.now() + 3 * DAY); hideNotice('backup'); }]]);
+}
+
+// ---------- other tabs ----------
+// Every write is broadcast (db.js). Here: keep lists in sync, and protect the open note.
+
+function showConflict() {
+  showNotice('conflict', '別のタブでこのノートが変更されています。このまま保存すると向こうの変更が消えるので、保存を止めました。',
+    [['最新を読み込む', reloadCurrentFromDb], ['こちらで上書き', () => { hideNotice('conflict'); saveNow({ force: true }); }]]);
+}
+
+async function reloadCurrentFromDb() {
+  hideNotice('conflict');
+  const id = currentId;
+  await resync();
+  if (!findNote(id)) return;
+  currentId = null; // force showNote to load the stored version into the editor
+  await showNote(id);
+}
+
+let resyncTimer = null;
+async function resync() {
+  clearTimeout(resyncTimer);
+  resyncTimer = null;
+  await loadNotes();
+  notebooks = await getAllNotebooks();
+  if (currentId && !findNote(currentId)) {
+    showNotice('conflict', 'このノートは別のタブで削除(ゴミ箱へ移動)されました。', [['一覧へ', () => { hideNotice('conflict'); currentId = null; go('list'); }]]);
+  }
+  renderAll();
+}
+
+channel?.addEventListener('message', ({ data: m }) => {
+  if (!m || m.from === TAB_ID) return;
+  if (m.type === 'changed') {
+    clearTimeout(resyncTimer);
+    resyncTimer = setTimeout(resync, 300);
+    if (m.store === 'notes' && m.id === currentId) {
+      if (saveTimer) return; // our pending save will hit the conflict check
+      showNotice('conflict', '別のタブでこのノートが変更されました。', [['最新を読み込む', reloadCurrentFromDb]]);
+    }
+  }
+  if ((m.type === 'who' || m.type === 'here') && m.id === currentId) {
+    if (m.type === 'who') channel.postMessage({ type: 'here', id: currentId, from: TAB_ID });
+    showNotice('tab', 'このノートは別のタブでも開いています。両方で書くと、片方の変更が消えることがあります(上書きしそうなときは保存を止めて知らせます)。');
+  }
+});
+
 // ---------- theme (home-screen toggle; follows the OS until one is picked) ----------
 
 const THEME_KEY = 'techo.theme';
@@ -1537,6 +1687,8 @@ registerSW({ immediate: true });
   const f = load(FILTER_KEY, { type: 'all' });
   filter = f.type === 'notebook' && !notebooks.some(nb => nb.id === f.id) ? { type: 'all' } : f;
   await route();
+  checkStorage();
+  checkBackupReminder();
   const leftover = notes.filter(n => n.html?.includes(PLACEHOLDER)).length;
   if (leftover) showToast(`${leftover}件のノートにEvernoteのタスクが未変換です。その.enexを取り込み直すと直ります`, false);
 })();

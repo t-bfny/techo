@@ -23,18 +23,45 @@ function open() {
         db.createObjectStore('notebooks', { keyPath: 'id' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // A newer version opened in another tab wants to upgrade: step aside instead of blocking it.
+      db.onversionchange = () => { db.close(); dbPromise = null; };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
 }
 
-function tx(store, mode, fn) {
+// Other tabs of techo hear about every write, so their lists don't go stale and an open
+// note can tell it was changed elsewhere.
+export const channel = 'BroadcastChannel' in window ? new BroadcastChannel('techo-data') : null;
+export const TAB_ID = Math.random().toString(36).slice(2);
+
+function tx(store, mode, fn, id) {
   return open().then(db => new Promise((resolve, reject) => {
-    const t = db.transaction(store, mode);
-    const result = fn(t.objectStore(store));
-    t.oncomplete = () => resolve(result && 'result' in result ? result.result : result);
-    t.onerror = () => reject(t.error);
+    const failWith = err => {
+      if (mode === 'readwrite') window.dispatchEvent(new CustomEvent('techo:write-failed', { detail: err }));
+      reject(err);
+    };
+    let t, result;
+    try {
+      t = db.transaction(store, mode);
+      result = fn(t.objectStore(store));
+    } catch (err) {
+      failWith(err); // e.g. the record can't be stored, or the connection was closed
+      return;
+    }
+    t.oncomplete = () => {
+      if (mode === 'readwrite') channel?.postMessage({ type: 'changed', store, id, from: TAB_ID });
+      resolve(result && 'result' in result ? result.result : result);
+    };
+    // A full disk aborts the transaction (QuotaExceededError) rather than erroring it;
+    // without onabort the promise would never settle and saving would hang forever.
+    const fail = () => failWith(t.error || new Error('保存できませんでした'));
+    t.onerror = fail;
+    t.onabort = fail;
   }));
 }
 
@@ -42,11 +69,12 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 
 export const getAllNotes = () => tx('notes', 'readonly', s => s.getAll());
 export const getNote = id => tx('notes', 'readonly', s => s.get(id));
-export const putNote = note => tx('notes', 'readwrite', s => s.put(note));
-export const deleteNote = id => tx('notes', 'readwrite', s => s.delete(id));
+// savedBy lets an open note tell "changed by another tab" apart from this tab's own writes.
+export const putNote = note => { note.savedBy = TAB_ID; return tx('notes', 'readwrite', s => s.put(note), note.id); };
+export const deleteNote = id => tx('notes', 'readwrite', s => s.delete(id), id);
 
 export const getAllNotebooks = () => tx('notebooks', 'readonly', s => s.getAll());
-export const putNotebook = nb => tx('notebooks', 'readwrite', s => s.put(nb));
+export const putNotebook = nb => tx('notebooks', 'readwrite', s => s.put(nb), nb.id);
 export const deleteNotebook = id => tx('notebooks', 'readwrite', s => s.delete(id));
 
 export const getAttachment =id => tx('attachments', 'readonly', s => s.get(id));

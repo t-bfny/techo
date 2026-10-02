@@ -19,7 +19,7 @@ function download(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Intl.DateTimeFormat('en-CA').format(new Date()); // local date, not UTC
 export const safeName = s => (s || '無題').replace(/[\\/:*?"<>|\r\n]+/g, '_').slice(0, 80);
 const attIds = notes => [...new Set(notes.flatMap(n => [...(n.html || '').matchAll(/att:([a-z0-9]+)/g)].map(m => m[1])))];
 
