@@ -41,7 +41,7 @@
 
 /* Light: follows the OS unless the home-screen toggle pinned a theme (html[data-theme]). */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
+  :root:not([data-theme]) {
     --bg: #f6f6f4;
     --sidebar: #ececea;
     --panel: #ffffff;
@@ -624,7 +624,7 @@ body:is([data-view="home"], [data-view="notebooks"], [data-view="tasks"], [data-
 
 :root { --glow-a: rgba(125, 211, 252, 0.28); --glow-b: rgba(196, 181, 253, 0.24); --rule: rgba(255, 255, 255, 0.045); --margin-line: rgba(244, 114, 182, 0.35); }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) { --glow-a: rgba(62, 142, 208, 0.20); --glow-b: rgba(142, 78, 198, 0.16); --rule: rgba(0, 0, 0, 0.06); --margin-line: rgba(229, 72, 77, 0.35); }
+  :root:not([data-theme]) { --glow-a: rgba(62, 142, 208, 0.20); --glow-b: rgba(142, 78, 198, 0.16); --rule: rgba(0, 0, 0, 0.06); --margin-line: rgba(229, 72, 77, 0.35); }
 }
 :root[data-theme="light"] { --glow-a: rgba(62, 142, 208, 0.20); --glow-b: rgba(142, 78, 198, 0.16); --rule: rgba(0, 0, 0, 0.06); --margin-line: rgba(229, 72, 77, 0.35); }
 
@@ -873,3 +873,44 @@ input, select, #search { border-color: var(--border-strong); }
 
 /* editing a template: a small tag in the breadcrumb */
 .template-mark { font-size: 12.5px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+
+/* ---------- deep color themes: the dark layout, tinted. Shown as ボルドー / フォレスト / インディゴ;
+   dark = グラファイト, light = ペーパー ---------- */
+
+:root[data-theme="red"] {
+  --bg: #1b1214; --sidebar: #120b0d; --panel: #211619; --panel-2: #2d1c21; --float: #321f25;
+  --border: rgba(255, 200, 212, 0.07); --border-strong: rgba(255, 200, 212, 0.12);
+  --text: #f4e9ec; --text-dim: rgba(244, 233, 236, 0.52);
+  --accent: #ff8fa8; --select-bg: rgba(255, 143, 168, 0.12); --hover: rgba(255, 220, 228, 0.04);
+  --highlight: rgba(255, 220, 228, 0.06);
+  --btn-bg: linear-gradient(180deg, #3a252b, #2d1d22); --btn-bg-hover: linear-gradient(180deg, #432a31, #352227);
+  --on-accent: #2a0c14;
+  --glow-a: rgba(244, 114, 182, 0.26); --glow-b: rgba(251, 146, 60, 0.18); --rule: rgba(255, 220, 228, 0.05);
+  color-scheme: dark;
+}
+:root[data-theme="green"] {
+  --bg: #101814; --sidebar: #0a100d; --panel: #151f1a; --panel-2: #1d2a23; --float: #203029;
+  --border: rgba(190, 255, 225, 0.07); --border-strong: rgba(190, 255, 225, 0.12);
+  --text: #e8f4ee; --text-dim: rgba(232, 244, 238, 0.52);
+  --accent: #6ee7b7; --select-bg: rgba(110, 231, 183, 0.12); --hover: rgba(210, 255, 235, 0.04);
+  --highlight: rgba(210, 255, 235, 0.055);
+  --btn-bg: linear-gradient(180deg, #24352d, #1c2a23); --btn-bg-hover: linear-gradient(180deg, #2a3e34, #213129);
+  --on-accent: #062018;
+  --glow-a: rgba(110, 231, 183, 0.24); --glow-b: rgba(125, 211, 252, 0.16); --rule: rgba(210, 255, 235, 0.05);
+  color-scheme: dark;
+}
+:root[data-theme="blue"] {
+  --bg: #0f141e; --sidebar: #090d15; --panel: #141a26; --panel-2: #1c2433; --float: #1f293a;
+  --border: rgba(190, 215, 255, 0.07); --border-strong: rgba(190, 215, 255, 0.12);
+  --text: #e8eef8; --text-dim: rgba(232, 238, 248, 0.52);
+  --accent: #7dd3fc; --select-bg: rgba(125, 211, 252, 0.12); --hover: rgba(210, 230, 255, 0.04);
+  --highlight: rgba(210, 230, 255, 0.055);
+  --btn-bg: linear-gradient(180deg, #243047, #1c2537); --btn-bg-hover: linear-gradient(180deg, #2a3852, #212b40);
+  --on-accent: #061626;
+  --glow-a: rgba(93, 168, 255, 0.28); --glow-b: rgba(196, 181, 253, 0.20); --rule: rgba(210, 230, 255, 0.05);
+  color-scheme: dark;
+}
+
+/* theme picker swatches */
+.theme-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: 10px; vertical-align: -2px; border: 1px solid rgba(127, 127, 127, 0.45); }
+.menu-item.current { color: var(--accent); }

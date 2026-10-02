@@ -1486,17 +1486,33 @@ const THEME_KEY = 'techo.theme';
 const systemTheme = () => (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 const currentTheme = () => document.documentElement.dataset.theme || systemTheme();
 
+// value, label, swatch (base color, accent color)
+const THEMES = [
+  ['dark', 'グラファイト', ['#141518', '#8fb4ff']],
+  ['light', 'ペーパー', ['#f6f6f4', '#3f4652']],
+  ['red', 'ボルドー', ['#3a1d24', '#ff8fa8']],
+  ['green', 'フォレスト', ['#1c3328', '#6ee7b7']],
+  ['blue', 'インディゴ', ['#1b2840', '#7dd3fc']],
+];
+
 function applyTheme(theme) {
   if (theme) document.documentElement.dataset.theme = theme;
-  $('themeBtn').textContent = currentTheme() === 'dark' ? 'ライトモード' : 'ダークモード';
+  const label = THEMES.find(([v]) => v === currentTheme())?.[1] || '';
+  $('themeBtn').textContent = `テーマ: ${label}`;
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
   document.querySelector('meta[name="theme-color"]').content = bg;
 }
 
-$('themeBtn').onclick = () => {
-  const next = currentTheme() === 'dark' ? 'light' : 'dark';
-  store(THEME_KEY, next);
-  applyTheme(next);
+$('themeBtn').onclick = e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  showMenuAt(r.left, r.bottom + 6, p => p.append(...THEMES.map(([value, label, swatch]) => {
+    const item = menuItem(label, () => { store(THEME_KEY, value); applyTheme(value); });
+    const dot = Object.assign(document.createElement('span'), { className: 'theme-swatch' });
+    dot.style.background = `linear-gradient(135deg, ${swatch[0]} 50%, ${swatch[1]} 50%)`;
+    item.prepend(dot);
+    if (value === currentTheme()) item.classList.add('current');
+    return item;
+  })));
 };
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => applyTheme());
 applyTheme();
