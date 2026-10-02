@@ -432,8 +432,9 @@ body[data-view="home"] #homeView,
 body[data-view="notebooks"] #notebooksView,
 body[data-view="tasks"] #tasksView,
 body[data-view="files"] #filesView,
-body[data-view="trash"] #trashView { display: flex; }
-body:is([data-view="home"], [data-view="notebooks"], [data-view="tasks"], [data-view="files"], [data-view="trash"]) :is(#listPane, #editorPane) { display: none !important; }
+body[data-view="trash"] #trashView,
+body[data-view="templates"] #templatesView { display: flex; }
+body:is([data-view="home"], [data-view="notebooks"], [data-view="tasks"], [data-view="files"], [data-view="trash"], [data-view="templates"]) :is(#listPane, #editorPane) { display: none !important; }
 .page-body { flex: 1; overflow-y: auto; padding: 8px 24px 40px; }
 .page .bar { gap: 10px; }
 .page .bar strong { font-size: 17.5px; }
@@ -869,3 +870,6 @@ input, select, #search { border-color: var(--border-strong); }
   #printArea li[data-due]::after { content: attr(data-due); font-size: 9pt; color: #777; }
   .print-yt { color: #555; font-size: 10pt; }
 }
+
+/* editing a template: a small tag in the breadcrumb */
+.template-mark { font-size: 12.5px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 999px; padding: 1px 9px; white-space: nowrap; }

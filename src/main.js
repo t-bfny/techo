@@ -17,7 +17,7 @@ import {
 import { resolveHtml, unresolveHtml, storeImage, storeBlob, attachmentUrl } from './attachments.js';
 import { DueTaskItem, allTasks, withTaskChecked, groupOpenTasks, fmtDue, isoDay } from './tasks.js';
 import { exportAll, importFile, exportNotesJson, exportNotesHtml } from './backup.js';
-import { importEnex, PLACEHOLDER } from './enex.js';
+import { importEnex, PLACEHOLDER, htmlToText } from './enex.js';
 import { JaAutolink } from './autolink.js';
 import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
 
@@ -156,9 +156,14 @@ const TRASH_DAYS = 30;
 const DAY = 86400000;
 const ATT_RE = /att:([a-z0-9]+)/g;
 
+// Templates live in the notes store with template: true, kept out of every list but their own.
+let templates = [];
+const findNote = id => notes.find(n => n.id === id) || templates.find(n => n.id === id);
+
 async function loadNotes() {
   const all = await getAllNotes();
-  notes = all.filter(n => !n.deletedAt);
+  notes = all.filter(n => !n.deletedAt && !n.template);
+  templates = all.filter(n => !n.deletedAt && n.template);
   trashed = all.filter(n => n.deletedAt);
 }
 
@@ -167,7 +172,7 @@ async function purge(list) {
   if (!list.length) return;
   const gone = new Set(list.map(n => n.id));
   const keep = new Set();
-  for (const n of [...notes, ...trashed]) {
+  for (const n of [...notes, ...trashed, ...templates]) {
     if (!gone.has(n.id)) for (const m of (n.html || '').matchAll(ATT_RE)) keep.add(m[1]);
   }
   for (const n of list) {
@@ -175,6 +180,7 @@ async function purge(list) {
     await deleteNote(n.id);
   }
   trashed = trashed.filter(n => !gone.has(n.id));
+  templates = templates.filter(n => !gone.has(n.id));
 }
 
 async function trashNotes(ids, { record = true } = {}) {
@@ -326,7 +332,7 @@ function scheduleSave() {
 async function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
-  const note = notes.find(n => n.id === currentId);
+  const note = findNote(currentId);
   if (!note) return;
   note.title = $('titleInput').value.trim();
   note.html = unresolveHtml(editor.getHTML());
@@ -342,10 +348,11 @@ const isBlank = n => !n.title && !n.text?.trim() && !/<(img|iframe|table)/.test(
 async function leaveCurrent() {
   if (!currentId) return;
   if (saveTimer) await saveNow();
-  const note = notes.find(n => n.id === currentId);
+  const note = findNote(currentId);
   if (note && isBlank(note)) {
     await deleteNote(note.id);
     notes = notes.filter(n => n.id !== note.id);
+    templates = templates.filter(n => n.id !== note.id);
     tabs = tabs.filter(t => t !== note.id);
     store(TABS_KEY, tabs);
   }
@@ -467,7 +474,8 @@ function renderSidebar() {
   $('countTasks').textContent = allTasks(notes).filter(t => !t.checked).length || '';
   $('countFiles').textContent = fileRefs().size || '';
   $('countTrash').textContent = trashed.length || '';
-  for (const g of ['tasks', 'files', 'trash']) document.querySelector(`.side-item[data-go="${g}"]`).classList.toggle('active', view === g);
+  $('countTemplates').textContent = templates.length || '';
+  for (const g of ['tasks', 'files', 'trash', 'templates']) document.querySelector(`.side-item[data-go="${g}"]`).classList.toggle('active', view === g);
   document.querySelector('.home-btn').classList.toggle('active', view === 'home');
   document.querySelector('.side-item[data-filter="all"]').classList.toggle('active', onList && filter.type === 'all');
   document.querySelector('.side-head [data-go="notebooks"]').classList.toggle('active', view === 'notebooks');
@@ -703,20 +711,22 @@ function renderList() {
 
 function renderTabs() {
   $('tabList').replaceChildren(...tabs.map(id => {
-    const n = notes.find(x => x.id === id);
+    const n = findNote(id);
     const tab = document.createElement('div');
     tab.className = 'tab' + (id === currentId ? ' active' : '');
     tab.dataset.id = id;
     tab.innerHTML = '<span class="ellipsis"></span><button class="tab-close" title="閉じる">×</button>';
-    tab.firstChild.textContent = n ? displayTitle(n) : '';
+    tab.firstChild.textContent = n ? (n.template ? `テンプレート: ${displayTitle(n)}` : displayTitle(n)) : '';
     return tab;
   }));
   $('tabList').querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 function renderCrumbs() {
-  const note = notes.find(n => n.id === currentId);
+  const note = findNote(currentId);
   if (!note) return;
+  $('templateMark').hidden = !note.template;
+  $('pinBtn').hidden = !!note.template;
   const sel = $('nbSelect');
   sel.replaceChildren(...[...notebooks].sort((a, b) => a.name.localeCompare(b.name, 'ja')).map(nb =>
     Object.assign(document.createElement('option'), { value: nb.id, textContent: nb.name })));
@@ -734,6 +744,7 @@ function renderAll() {
   if (view === 'tasks') renderTasksPage();
   if (view === 'files') renderFilesPage();
   if (view === 'trash') renderTrashPage();
+  if (view === 'templates') renderTemplatesPage();
   renderList();
   renderTabs();
   renderCrumbs();
@@ -769,7 +780,7 @@ async function closeTab(id) {
 }
 
 async function showNote(id) {
-  const note = notes.find(n => n.id === id);
+  const note = findNote(id);
   if (!note) { go(''); return; }
   if (!tabs.includes(id)) { tabs.push(id); store(TABS_KEY, tabs); }
   currentId = id;
@@ -807,7 +818,7 @@ function go(hash) {
 async function doRoute() {
   const hash = location.hash;
   const [, id, mode] = hash.match(/^#n\/([a-z0-9]+)(?:\/(stage))?$/) || [];
-  view = id ? 'note' : ({ '#notebooks': 'notebooks', '#list': 'list', '#tasks': 'tasks', '#files': 'files', '#trash': 'trash' })[hash] || 'home';
+  view = id ? 'note' : ({ '#notebooks': 'notebooks', '#list': 'list', '#tasks': 'tasks', '#files': 'files', '#trash': 'trash', '#templates': 'templates' })[hash] || 'home';
   document.body.dataset.view = view;
   if (id !== currentId) {
     await leaveCurrent();
@@ -831,6 +842,124 @@ async function newNote({ newTab = true } = {}) {
   closeDrawer();
   await openNote(note.id, { newTab });
   $('titleInput').focus();
+}
+
+// ---------- templates ----------
+// A template is a copy of a note. Saving one turns dates in its title ("Task - @2026-10-01")
+// into {{date}}; using it fills in today's date, unchecks every task and drops due dates,
+// so the daily note starts clean. Nothing is created automatically.
+
+const DATE_RE = /\d{4}-\d{2}-\d{2}/g;
+const fillDate = s => (s || '').replaceAll('{{date}}', isoDay());
+const templateLabel = t => (t.title || '無題').replaceAll('{{date}}', '〈日付〉');
+
+// Right-click → コピーを作成: same notebook, "… のコピー", attachments shared with the original.
+async function duplicateNotes(list) {
+  if (saveTimer) await saveNow();
+  const now = Date.now();
+  const copies = list.map((n, i) => ({
+    ...n, id: uid(), title: `${baseTitle(n)} のコピー`, pinned: false, pinTop: false, sourceKey: undefined,
+    createdAt: now + i, updatedAt: now + i,
+  }));
+  for (const c of copies) { delete c.sourceKey; await putNote(c); }
+  notes.push(...copies);
+  pushUndo(`${copies.length === 1 ? `「${copies[0].title}」` : `${copies.length}件のコピー`}を作成しました`, async () => {
+    const ids = new Set(copies.map(c => c.id));
+    for (const c of copies) await deleteNote(c.id);
+    notes = notes.filter(n => !ids.has(n.id));
+    tabs = tabs.filter(t => !ids.has(t));
+    store(TABS_KEY, tabs);
+    if (ids.has(currentId)) { currentId = null; await go('list'); } else renderAll();
+  });
+  if (copies.length === 1) await openNote(copies[0].id); else renderAll();
+}
+
+async function saveAsTemplate(note) {
+  if (note.id === currentId && saveTimer) await saveNow();
+  const now = Date.now();
+  const t = {
+    id: uid(), template: true, title: (note.title || '').replace(DATE_RE, '{{date}}'),
+    html: note.html || '', text: note.text || '', notebookId: note.notebookId, createdAt: now, updatedAt: now,
+  };
+  await putNote(t);
+  templates.push(t);
+  pushUndo(`テンプレート「${templateLabel(t)}」を保存しました`, async () => {
+    await deleteNote(t.id); // its attachments stay: the original note still uses them
+    templates = templates.filter(x => x.id !== t.id);
+    renderAll();
+  });
+  renderAll();
+}
+
+function freshFromTemplate(html) {
+  const doc = new DOMParser().parseFromString(fillDate(html), 'text/html');
+  for (const li of doc.querySelectorAll('li[data-checked]')) {
+    li.setAttribute('data-checked', 'false');
+    for (const a of ['data-due', 'data-due-label', 'data-overdue']) li.removeAttribute(a);
+  }
+  for (const box of doc.querySelectorAll('li input[type="checkbox"]')) box.removeAttribute('checked');
+  return doc.body.innerHTML;
+}
+
+async function newFromTemplate(t, { newTab = true } = {}) {
+  const now = Date.now();
+  const html = freshFromTemplate(t.html || '');
+  const notebookId = notebooks.some(nb => nb.id === t.notebookId) ? t.notebookId
+    : filter.type === 'notebook' ? filter.id : defaultNotebook().id;
+  const note = { id: uid(), title: fillDate(t.title), html, text: htmlToText(html), notebookId, pinned: false, createdAt: now, updatedAt: now };
+  await putNote(note);
+  notes.push(note);
+  closeDrawer();
+  await openNote(note.id, { newTab });
+  editor.commands.focus('end');
+}
+
+async function deleteTemplate(t) {
+  if (!confirm(`テンプレート「${templateLabel(t)}」を削除しますか`)) return;
+  const wasOpen = currentId === t.id;
+  tabs = tabs.filter(id => id !== t.id);
+  store(TABS_KEY, tabs);
+  if (wasOpen) { currentId = null; await go('templates'); }
+  await purge([t]);
+  renderAll();
+}
+
+// 新規作成: straight to a blank note until a template exists, then a small chooser.
+function newMenu(anchor) {
+  if (!templates.length) { newNote(); return; }
+  const r = anchor.getBoundingClientRect();
+  showMenuAt(r.left, r.bottom + 6, p => p.append(
+    menuItem('空のノート', () => newNote()),
+    menuSep(),
+    menuLabel('テンプレートから'),
+    ...[...templates].sort((a, b) => byName(a.title || '', b.title || '')).map(t => menuItem(fillDate(t.title) || '無題', () => newFromTemplate(t))),
+  ));
+}
+
+function renderTemplatesPage() {
+  const list = [...templates].sort((a, b) => byName(a.title || '', b.title || ''));
+  $('templateCount').textContent = `${list.length}件`;
+  if (!list.length) {
+    $('templateRows').replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'side-empty', textContent: '元にしたいノートを右クリック →「テンプレートとして保存」で作れます',
+    }));
+    return;
+  }
+  const box = Object.assign(document.createElement('div'), { className: 'rows' });
+  box.append(...list.map(t => {
+    const row = document.createElement('div');
+    row.className = 'trash-row';
+    row.innerHTML = '<div class="trash-main"><span class="task-t ellipsis"></span><span class="dim ellipsis"></span></div>'
+      + '<button class="mini">使う</button><button class="mini">編集</button><button class="mini danger">削除</button>';
+    row.querySelector('.task-t').textContent = templateLabel(t);
+    row.querySelector('.dim').textContent = `作成先: ${notebookName(t.notebookId) || '(現在のノートブック)'} · 今日なら「${fillDate(t.title) || '無題'}」`;
+    const [use, edit, del] = row.querySelectorAll('button');
+    use.dataset.useTemplate = t.id;
+    edit.dataset.editTemplate = t.id;
+    del.dataset.deleteTemplate = t.id;
+    return row;
+  }));
+  $('templateRows').replaceChildren(box);
 }
 
 // On a wide screen an open note stays open while the list changes; otherwise show the list.
@@ -866,7 +995,10 @@ function handleNav(e) {
   if (d.filter) setFilter({ type: d.filter });
   if (d.notebook) setFilter({ type: 'notebook', id: d.notebook });
   if (d.note) { closeDrawer(); openNote(d.note); }
-  if ('new' in d) newNote();
+  if ('new' in d) newMenu(b);
+  if (d.useTemplate) { const t = templates.find(x => x.id === d.useTemplate); if (t) newFromTemplate(t); }
+  if (d.editTemplate) openNote(d.editTemplate);
+  if (d.deleteTemplate) { const t = templates.find(x => x.id === d.deleteTemplate); if (t) deleteTemplate(t); }
   if ('drawer' in d) openDrawer();
 }
 
@@ -913,12 +1045,12 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- events ----------
 
-$('newBtn').onclick = () => newNote();
-$('newTabBtn').onclick = () => newNote();
+$('newBtn').onclick = e => newMenu(e.currentTarget);
+$('newTabBtn').onclick = e => newMenu(e.currentTarget);
 $('menuBtn').onclick = openDrawer;
 $('scrim').onclick = closeDrawer;
 
-for (const id of ['sidebar', 'homeView', 'notebooksView', 'tasksView', 'filesView']) $(id).addEventListener('click', handleNav);
+for (const id of ['sidebar', 'homeView', 'notebooksView', 'tasksView', 'filesView', 'templatesView']) $(id).addEventListener('click', handleNav);
 for (const id of ['homeView', 'tasksView']) {
   $(id).addEventListener('change', e => { if (e.target.dataset.task) toggleTask(e.target.dataset.task, e.target.checked); });
 }
@@ -1030,7 +1162,9 @@ function noteMenu(x, y, ids, extra = []) {
       menuItem('開く', () => openNote(one.id)),
       menuItem('新しいタブで開く', () => openNote(one.id, { newTab: true })),
       menuItem('名前を変更', () => renameNote(one)),
-    ] : [menuLabel(`${list.length}件を選択中`)]),
+      menuItem('コピーを作成', () => duplicateNotes(list)),
+      menuItem('テンプレートとして保存', () => saveAsTemplate(one)),
+    ] : [menuLabel(`${list.length}件を選択中`), menuItem(`${list.length}件のコピーを作成`, () => duplicateNotes(list))]),
     ...extra,
     menuSep(),
     menuItem(allTop ? 'ピン留めを外す' : 'ピン留め', () => setPinTop(ids, !allTop)),
@@ -1202,7 +1336,11 @@ $('titleInput').onkeydown = e => {
 };
 $('backBtn').onclick = () => { go('list'); };
 
-$('nbSelect').onchange = e => { if (currentId) moveNotes([currentId], e.target.value); };
+$('nbSelect').onchange = async e => {
+  const t = templates.find(x => x.id === currentId);
+  if (t) { t.notebookId = e.target.value; await putNote(t); renderAll(); return; } // where its notes get created
+  if (currentId) moveNotes([currentId], e.target.value);
+};
 
 $('pinBtn').onclick = () => {
   const note = notes.find(n => n.id === currentId);
@@ -1245,7 +1383,10 @@ $('fontUp').onclick = () => stageFont(2);
 $('fontDown').onclick = () => stageFont(-2);
 
 // Deleting moves to the trash; no confirm needed since Ctrl+Z / 元に戻す brings it back.
-$('deleteBtn').onclick = () => { if (currentId) trashNotes([currentId]); };
+$('deleteBtn').onclick = () => {
+  const t = templates.find(x => x.id === currentId);
+  if (t) deleteTemplate(t); else if (currentId) trashNotes([currentId]);
+};
 
 $('exportBtn').onclick = () => exportAll();
 $('importBtn').onclick = () => $('importInput').click();

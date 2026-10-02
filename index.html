@@ -31,6 +31,7 @@
         <button class="side-item sep-top" data-filter="all"><span>ノート</span><span class="n" id="countAll"></span></button>
         <button class="side-item" data-go="tasks"><span>タスク</span><span class="n" id="countTasks"></span></button>
         <button class="side-item" data-go="files"><span>ファイル</span><span class="n" id="countFiles"></span></button>
+        <button class="side-item" data-go="templates"><span>テンプレート</span><span class="n" id="countTemplates"></span></button>
         <div class="side-head">
           <button class="link-plain" data-go="notebooks">ノートブック</button>
           <button id="addNotebookBtn" class="mini" title="ノートブックを追加">+</button>
@@ -160,6 +161,18 @@
       <div class="page-body"><div id="fileGrid" class="file-grid"></div></div>
     </section>
 
+    <section id="templatesView" class="page">
+      <header class="bar">
+        <button class="drawer-only" data-drawer>メニュー</button>
+        <strong>テンプレート</strong>
+        <span id="templateCount" class="dim"></span>
+      </header>
+      <div class="page-body">
+        <p class="dim trash-note">「新規作成」から選べます。タイトルの〈日付〉は作った日の日付になり、チェックリストは未チェックで始まります。</p>
+        <div id="templateRows" class="task-page"></div>
+      </div>
+    </section>
+
     <section id="trashView" class="page">
       <header class="bar">
         <button class="drawer-only" data-drawer>メニュー</button>
@@ -180,6 +193,7 @@
       <div id="editorWrap" hidden>
         <header class="bar crumbs">
           <button id="backBtn" class="narrow-only">一覧</button>
+          <span id="templateMark" class="template-mark" hidden>テンプレート</span>
           <select id="nbSelect" title="ノートブックを移動"></select>
           <span class="sep">›</span>
           <span id="crumbTitle" class="ellipsis"></span>
