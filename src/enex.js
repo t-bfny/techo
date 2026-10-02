@@ -4,6 +4,7 @@ import SparkMD5 from 'spark-md5';
 import { isValidYoutubeUrl } from '@tiptap/extension-youtube';
 import { uid, getAllNotes, putNote, getAllNotebooks, putNotebook, deleteAttachment } from './db.js';
 import { storeBlob } from './attachments.js';
+import { sanitizeHtml } from './sanitize.js';
 
 const BLOCK = new Set(['DIV', 'P', 'UL', 'OL', 'LI', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH',
   'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'BLOCKQUOTE', 'HR', 'IMG', 'EN-MEDIA']);
@@ -258,7 +259,7 @@ function repairPlaceholders(html, el) {
     const tasks = lists[i] || [];
     if (tasks.length) p.replaceWith(taskListEl(doc, tasks)); else p.remove();
   });
-  return doc.body.innerHTML;
+  return sanitizeHtml(doc.body.innerHTML);
 }
 
 // Reads the file in chunks and yields one <note> element at a time. Some exports are
@@ -325,7 +326,7 @@ function convertNote(el, media) {
   const body = parsed.querySelector('en-note') || parsed.body;
   replaceTaskGroups(body, readTasks(el));
   convertBody(body, media);
-  return body.innerHTML;
+  return sanitizeHtml(body.innerHTML);
 }
 
 // onProgress(notesDone, fraction of the file read)

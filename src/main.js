@@ -14,11 +14,12 @@ import {
   uid, getAllAttachments, getAllNotes, putNote, deleteNote, getAllNotebooks, putNotebook, deleteNotebook, requestPersist,
   deleteAttachment,
 } from './db.js';
-import { resolveHtml, unresolveHtml, storeImage, storeBlob, attachmentUrl } from './attachments.js';
+import { resolveHtml, unresolveHtml, storeImage, storeBlob, attachmentUrl, attachmentLink } from './attachments.js';
 import { DueTaskItem, allTasks, withTaskChecked, groupOpenTasks, fmtDue, isoDay } from './tasks.js';
 import { exportAll, importFile, exportNotesJson, exportNotesHtml } from './backup.js';
 import { importEnex, PLACEHOLDER, htmlToText } from './enex.js';
 import { JaAutolink } from './autolink.js';
+import { sanitizeHtml } from './sanitize.js';
 import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
 
 const $ = id => document.getElementById(id);
@@ -648,7 +649,7 @@ async function renderFilesPage() {
       thumb.textContent = (a.name?.split('.').pop() || a.type.split('/').pop() || 'FILE').toUpperCase().slice(0, 5);
     }
     const link = tile.querySelector('.file-name');
-    link.href = url;
+    link.href = await attachmentLink(a.id);
     link.textContent = a.name || (isImg(a) ? '画像' : 'ファイル');
     if (a.name) link.download = a.name;
     const nb = tile.querySelector('.file-note');
@@ -1022,7 +1023,7 @@ async function lockScreenOn() {
 }
 
 function enterStage() {
-  $('stageBody').innerHTML = `<h1></h1>${editor.getHTML()}`;
+  $('stageBody').innerHTML = `<h1></h1>${sanitizeHtml(editor.getHTML())}`;
   const cur = notes.find(n => n.id === currentId);
   $('stageBody').querySelector('h1').textContent = [cur && numberLabel(cur), $('titleInput').value || '無題'].filter(Boolean).join(' ');
   $('stage').hidden = false;
@@ -1204,7 +1205,9 @@ async function printNotes(list) {
   if (!list.length) return;
   if (saveTimer) await saveNow();
   const area = $('printArea');
-  const bodies = await Promise.all(list.map(n => resolveHtml(n.html || '')));
+  // Stored HTML goes straight into the page here, so it is cleaned first (older imports
+  // were saved before sanitizing existed).
+  const bodies = await Promise.all(list.map(n => resolveHtml(sanitizeHtml(n.html))));
   area.replaceChildren(...list.map((n, i) => {
     const art = document.createElement('article');
     art.className = 'print-note';
@@ -1368,7 +1371,7 @@ $('fileInput').onchange = async e => {
   for (const f of files) {
     if (f.type.startsWith('image/')) { insertImageFiles([f]); continue; }
     const id = await storeBlob(f, f.name);
-    const href = await attachmentUrl(id);
+    const href = await attachmentLink(id);
     editor.chain().focus().insertContent({
       type: 'paragraph',
       content: [{ type: 'text', text: `添付: ${f.name}`, marks: [{ type: 'link', attrs: { href } }] }],

@@ -3,8 +3,14 @@
 import { uid, getAttachment, putAttachment } from './db.js';
 
 const MAX_SIDE = 2000;
-const urlById = new Map();
+const urlById = new Map();     // for <img src>: the file's real type
+const linkById = new Map();    // for <a href>: only types a browser opens without running code
 const idByUrl = new Map();
+
+// An object URL opened in a tab runs with techo's origin, so an HTML or SVG attachment could
+// read every note. Links therefore point at a copy typed as a plain download unless the type
+// is one the browser only displays.
+const OPENABLE = /^(image\/(png|jpe?g|gif|webp|avif|bmp)|application\/pdf|audio\/|video\/|text\/plain)/;
 
 async function urlFor(id) {
   if (urlById.has(id)) return urlById.get(id);
@@ -16,12 +22,27 @@ async function urlFor(id) {
   return url;
 }
 
+async function linkFor(id) {
+  if (linkById.has(id)) return linkById.get(id);
+  const att = await getAttachment(id);
+  if (!att) return '';
+  const safe = OPENABLE.test(att.blob.type || att.type || '');
+  const url = safe ? await urlFor(id) : URL.createObjectURL(new Blob([att.blob], { type: 'application/octet-stream' }));
+  linkById.set(id, url);
+  idByUrl.set(url, id);
+  return url;
+}
+
 export const attachmentUrl = urlFor;
+export const attachmentLink = linkFor;
 
 export async function resolveHtml(html) {
   const ids = [...new Set([...html.matchAll(/att:([a-z0-9]+)/g)].map(m => m[1]))];
-  await Promise.all(ids.map(urlFor));
-  return html.replace(/att:([a-z0-9]+)/g, (_, id) => urlById.get(id) || '');
+  const linked = new Set([...html.matchAll(/href="att:([a-z0-9]+)"/g)].map(m => m[1]));
+  await Promise.all([...ids.map(urlFor), ...[...linked].map(linkFor)]);
+  return html
+    .replace(/href="att:([a-z0-9]+)"/g, (_, id) => `href="${linkById.get(id) || ''}"`)
+    .replace(/att:([a-z0-9]+)/g, (_, id) => urlById.get(id) || '');
 }
 
 export function unresolveHtml(html) {
