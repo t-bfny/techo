@@ -3,6 +3,7 @@ import {
   getAllNotes, getAllAttachments, getAllNotebooks, getNote, putNote, putAttachment, putNotebook, getAttachment,
 } from './db.js';
 import { sanitizeHtml } from './sanitize.js';
+import { fillToc } from './toc.js';
 
 const toDataUrl = blob => new Promise(r => {
   const fr = new FileReader();
@@ -54,14 +55,20 @@ export async function exportNotesJson(notes, notebooks, name) {
 export async function exportNotesHtml(notes, titleOf, name) {
   const urls = new Map((await attachmentsFor(attIds(notes))).map(a => [a.id, a.data]));
   const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const body = notes.map(n => `<article><h1>${esc(titleOf(n))}</h1>${
-    sanitizeHtml(n.html).replace(/att:([a-z0-9]+)/g, (_, id) => urls.get(id) || '')}</article>`).join('<hr>');
+  const body = notes.map((n, i) => {
+    const art = document.createElement('article');
+    art.innerHTML = `<h1 data-note-title>${esc(titleOf(n))}</h1>${
+      sanitizeHtml(n.html).replace(/att:([a-z0-9]+)/g, (_, id) => urls.get(id) || '')}`;
+    fillToc(art, { links: true, prefix: `n${i + 1}` });
+    return art.outerHTML;
+  }).join('<hr>');
   const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(name)}</title>
 <style>body{font-family:-apple-system,'Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;max-width:820px;margin:0 auto;padding:24px;line-height:1.75}
 img{max-width:100%;height:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 10px}
 pre{background:#f3f3f3;padding:12px;overflow-x:auto}ul[data-type=taskList]{list-style:none;padding-left:4px}
 li[data-checked=true]{color:#888;text-decoration:line-through}li[data-type=taskItem]::before{content:'☐ '}li[data-checked=true]::before{content:'☑ '}
-li[data-due]::after{content:' (' attr(data-due) ')';color:#888;font-size:.85em}iframe{width:100%;aspect-ratio:16/9;border:0}hr{margin:40px 0}</style>
+li[data-due]::after{content:' (' attr(data-due) ')';color:#888;font-size:.85em}iframe{width:100%;aspect-ratio:16/9;border:0}hr{margin:40px 0}
+.toc{border:1px solid #ddd;border-radius:8px;padding:10px 14px;margin:12px 0}.toc-head{font-weight:600;margin-bottom:4px}.toc-item{display:block;padding:2px 0}.toc-item[data-depth='1']{padding-left:1.2em}.toc-item[data-depth='2']{padding-left:2.4em}.toc-empty{color:#888}</style>
 </head><body>${body}</body></html>`;
   download(new Blob([html], { type: 'text/html' }), `${safeName(name)}.html`);
 }

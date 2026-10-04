@@ -20,6 +20,7 @@ import { exportAll, importFile, exportNotesJson, exportNotesHtml } from './backu
 import { importEnex, PLACEHOLDER, htmlToText } from './enex.js';
 import { JaAutolink } from './autolink.js';
 import { sanitizeHtml } from './sanitize.js';
+import { TableOfContents, fillToc } from './toc.js';
 import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
 
 const $ = id => document.getElementById(id);
@@ -73,6 +74,7 @@ const editor = new Editor({
     TaskList, DueTaskItem.configure({ nested: true }),
     Placeholder.configure({ placeholder: '本文' }),
     JaAutolink,
+    TableOfContents,
   ],
   editorProps: {
     handlePaste: (_view, event) =>
@@ -1061,9 +1063,10 @@ async function lockScreenOn() {
 }
 
 function enterStage() {
-  $('stageBody').innerHTML = `<h1></h1>${sanitizeHtml(editor.getHTML())}`;
+  $('stageBody').innerHTML = `<h1 data-note-title></h1>${sanitizeHtml(editor.getHTML())}`;
   const cur = notes.find(n => n.id === currentId);
   $('stageBody').querySelector('h1').textContent = [cur && numberLabel(cur), $('titleInput').value || '無題'].filter(Boolean).join(' ');
+  fillToc($('stageBody'));
   $('stage').hidden = false;
   stageFont();
   lockScreenOn();
@@ -1249,8 +1252,9 @@ async function printNotes(list) {
   area.replaceChildren(...list.map((n, i) => {
     const art = document.createElement('article');
     art.className = 'print-note';
-    art.innerHTML = '<h1></h1><div class="print-meta"></div>' + bodies[i];
+    art.innerHTML = '<h1 data-note-title></h1><div class="print-meta"></div>' + bodies[i];
     art.querySelector('h1').textContent = displayTitle(n);
+    fillToc(art);
     art.querySelector('.print-meta').textContent = `${notebookName(n.notebookId)} · ${new Date(n.updatedAt).toLocaleDateString('ja-JP')}`;
     return art;
   }));

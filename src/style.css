@@ -401,6 +401,38 @@ button.side-head:hover { color: var(--text); }
 :is(.tiptap, #stageBody) :is(td, th) p { margin: 0; }
 .tiptap .selectedCell { background: rgba(127, 127, 127, 0.18); }
 
+/* 目次: rebuilt from the headings; tap an entry to jump there. */
+:is(.tiptap, #stageBody) .toc {
+  margin: 12px 0;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  user-select: none;
+}
+.tiptap .toc.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toc-head { font-size: 0.82em; font-weight: 600; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 4px; }
+.toc-empty { font-size: 0.9em; color: var(--text-dim); }
+:is(.tiptap, #stageBody) .toc-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 4px 8px;
+  margin: 0 -8px;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--accent);
+  cursor: pointer;
+}
+:is(.tiptap, #stageBody) .toc-item:hover { background: var(--select-bg); }
+:is(.tiptap, #stageBody) .toc-item[data-depth="1"] { padding-left: calc(8px + 1.2em); }
+:is(.tiptap, #stageBody) .toc-item[data-depth="2"] { padding-left: calc(8px + 2.4em); }
+:is(.tiptap, #stageBody) :is(h1, h2, h3) { scroll-margin-top: 12px; }
+
 /* ---------- stage: read-only, big text, screen stays on ---------- */
 
 #stage {
@@ -859,6 +891,11 @@ input, select, #search { border-color: var(--border-strong); }
   #printArea pre { background: #f3f3f3; padding: 8pt; white-space: pre-wrap; font-size: 9.5pt; }
   #printArea blockquote { margin: 6pt 0; padding-left: 10pt; border-left: 2pt solid #ccc; color: #555; }
   #printArea hr { border: 0; border-top: 0.5pt solid #ccc; margin: 12pt 0; }
+  #printArea .toc { border: 0.5pt solid #ccc; border-radius: 4pt; padding: 6pt 10pt; margin: 8pt 0; break-inside: avoid; }
+  #printArea .toc-head { font-size: 9pt; font-weight: 600; color: #555; margin-bottom: 2pt; }
+  #printArea .toc-item { display: block; background: none; border: 0; padding: 1pt 0; font: inherit; color: #111; text-align: left; }
+  #printArea .toc-item[data-depth="1"] { padding-left: 1.2em; }
+  #printArea .toc-item[data-depth="2"] { padding-left: 2.4em; }
   #printArea ul[data-type="taskList"] { list-style: none; padding-left: 0; }
   #printArea li[data-type="taskItem"], #printArea ul[data-type="taskList"] > li { display: flex; gap: 6pt; }
   #printArea ul[data-type="taskList"] label { display: none; }

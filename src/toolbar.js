@@ -110,6 +110,7 @@ export function setupToolbar(editor, insert) {
           menuItem('チェックリスト', () => editor.chain().focus().toggleTaskList().run()),
           menuItem('引用', () => editor.chain().focus().toggleBlockquote().run()),
           menuItem('区切り線', () => editor.chain().focus().setHorizontalRule().run()),
+          menuItem('目次', () => editor.chain().focus().insertTableOfContents().run()),
         );
       });
     }
