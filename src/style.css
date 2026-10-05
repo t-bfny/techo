@@ -401,6 +401,16 @@ button.side-head:hover { color: var(--text); }
 :is(.tiptap, #stageBody) :is(td, th) p { margin: 0; }
 .tiptap .selectedCell { background: rgba(127, 127, 127, 0.18); }
 
+/* Tab indentation (data-indent 1..8), same steps in the editor, preview and print. */
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="1"] { margin-left: 2em; }
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="2"] { margin-left: 4em; }
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="3"] { margin-left: 6em; }
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="4"] { margin-left: 8em; }
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="5"] { margin-left: 10em; }
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="6"] { margin-left: 12em; }
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="7"] { margin-left: 14em; }
+:is(.tiptap, #stageBody, #printArea) :is(p, h1, h2, h3)[data-indent="8"] { margin-left: 16em; }
+
 /* 目次: rebuilt from the headings; tap an entry to jump there. */
 :is(.tiptap, #stageBody) .toc {
   margin: 12px 0;

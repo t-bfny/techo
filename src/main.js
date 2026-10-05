@@ -21,6 +21,7 @@ import { importEnex, PLACEHOLDER, htmlToText } from './enex.js';
 import { JaAutolink } from './autolink.js';
 import { sanitizeHtml } from './sanitize.js';
 import { TableOfContents, fillToc } from './toc.js';
+import { Indent, KeepTab } from './indent.js';
 import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
 
 const $ = id => document.getElementById(id);
@@ -57,6 +58,7 @@ const editor = new Editor({
   element: $('editor'),
   extensions: [
     StarterKit.configure({
+      codeBlock: { enableTabIndentation: true },
       link: {
         autolink: true,
         openOnClick: true,
@@ -75,6 +77,7 @@ const editor = new Editor({
     Placeholder.configure({ placeholder: '本文' }),
     JaAutolink,
     TableOfContents,
+    Indent, KeepTab,
   ],
   editorProps: {
     handlePaste: (_view, event) =>
