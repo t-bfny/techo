@@ -43,12 +43,19 @@ let loading = false;
 
 const TABS_KEY = 'techo.tabs';
 const FILTER_KEY = 'techo.filter';
+
+// 新しいウィンドウ (?w=1#n/ID): one note on its own, no sidebar/list/tabs. It keeps its tabs and
+// filter to itself so the main window's state is untouched.
+const SOLO = new URLSearchParams(location.search).has('w');
+if (SOLO) document.body.classList.add('solo');
+const OWN_STATE = new Set([TABS_KEY, FILTER_KEY]);
 const FONT_KEY = 'techo.stageFont';
 
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 }
 function store(key, value) {
+  if (SOLO && OWN_STATE.has(key)) return;
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage blocked */ }
 }
 
@@ -804,6 +811,18 @@ function openNote(id, { newTab = false } = {}) {
   return go(`n/${id}`);
 }
 
+// Saved first so the new window loads the latest text; then the note leaves this window's
+// tabs, so it is never open in two places at once.
+async function openInWindow(id) {
+  if (saveTimer) await saveNow();
+  const w = window.open(`/?w=1#n/${id}`, `techo-${id}`, 'popup,width=860,height=920');
+  if (!w) { alert('新しいウィンドウを開けませんでした。ブラウザのポップアップの設定を確認してください。'); return; }
+  w.focus();
+  if (tabs.includes(id)) closeTab(id);
+}
+
+const canWindow = !SOLO && matchMedia('(pointer: fine)').matches; // phones have no windows
+
 async function closeTab(id) {
   const i = tabs.indexOf(id);
   if (i < 0) return;
@@ -839,6 +858,7 @@ async function showNote(id) {
   $('emptyState').hidden = true;
   $('editorWrap').hidden = false;
   document.body.classList.add('show-editor');
+  if (SOLO) document.title = note.title || '無題';
   renderAll();
 }
 
@@ -869,6 +889,7 @@ async function doRoute() {
     await leaveCurrent();
     if (id) await showNote(id);
   }
+  if (!id && SOLO) { window.close(); } // its note was closed or deleted
   if (!id) {
     $('editorWrap').hidden = true;
     $('emptyState').hidden = false;
@@ -1207,6 +1228,7 @@ function noteMenu(x, y, ids, extra = []) {
     ...(one ? [
       menuItem('開く', () => openNote(one.id)),
       menuItem('新しいタブで開く', () => openNote(one.id, { newTab: true })),
+      ...(canWindow ? [menuItem('新しいウィンドウで開く', () => openInWindow(one.id))] : []),
       menuItem('名前を変更', () => renameNote(one)),
       menuItem('コピーを作成', () => duplicateNotes(list)),
       menuItem('テンプレートとして保存', () => saveAsTemplate(one)),
@@ -1379,7 +1401,11 @@ $('tabList').addEventListener('auxclick', e => {
 });
 
 $('search').oninput = renderList;
-$('titleInput').oninput = () => { scheduleSave(); $('crumbTitle').textContent = $('titleInput').value || '無題'; };
+$('titleInput').oninput = () => {
+  scheduleSave();
+  $('crumbTitle').textContent = $('titleInput').value || '無題';
+  if (SOLO) document.title = $('titleInput').value || '無題';
+};
 $('titleInput').onkeydown = e => {
   if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); editor.commands.focus('start'); }
 };
@@ -1715,13 +1741,12 @@ registerSW({ immediate: true });
   notebooks = await getAllNotebooks();
   await ensureNotebooks();
   const ids = new Set(notes.map(n => n.id));
-  tabs = load(TABS_KEY, []).filter(id => ids.has(id));
+  tabs = SOLO ? [] : load(TABS_KEY, []).filter(id => ids.has(id));
   sort = { ...sort, ...load(SORT_KEY, {}) };
   const f = load(FILTER_KEY, { type: 'all' });
   filter = f.type === 'notebook' && !notebooks.some(nb => nb.id === f.id) ? { type: 'all' } : f;
   await route();
-  checkStorage();
-  checkBackupReminder();
+  if (!SOLO) { checkStorage(); checkBackupReminder(); } // the main window already says these
   const leftover = notes.filter(n => n.html?.includes(PLACEHOLDER)).length;
   if (leftover) showToast(`${leftover}件のノートにEvernoteのタスクが未変換です。その.enexを取り込み直すと直ります`, false);
 })();

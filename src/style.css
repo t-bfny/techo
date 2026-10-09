@@ -987,3 +987,7 @@ body { display: flex; flex-direction: column; }
 #noticeMsg { flex: 1; min-width: 0; }
 #notice button { flex-shrink: 0; }
 @media (max-width: 760px) { #notice { flex-wrap: wrap; margin: max(6px, env(safe-area-inset-top)) 6px 6px; } #noticeMsg { flex-basis: 100%; } }
+
+/* 新しいウィンドウ: only the note. Last in the file so it wins over the per-view rules. */
+body.solo :is(#sidebar, #scrim, #listPane, #tabs, .page, #backBtn, .drawer-only) { display: none !important; }
+body.solo #editorPane { display: flex !important; }
