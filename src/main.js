@@ -380,6 +380,7 @@ async function retryUnsaved() {
 // Closing the tab with unsaved edits would lose them.
 window.addEventListener('beforeunload', e => {
   if (unsavedIds.size || saveTimer) { if (saveTimer) saveNow(); if (unsavedIds.size) { e.preventDefault(); e.returnValue = ''; } }
+  if (exporting) { e.preventDefault(); e.returnValue = ''; } // a half-written backup is useless
 });
 
 const isBlank = n => !n.title && !n.text?.trim() && !/<(img|iframe|table)/.test(n.html || '');
@@ -1165,7 +1166,7 @@ async function removeNotebook(nb) {
 function exportNotebook(nb, format) {
   const inside = sortNotes(notes.filter(n => n.notebookId === nb.id));
   if (format === 'html') exportNotesHtml(inside, displayTitle, nb.name);
-  else exportNotesJson(inside, [nb], nb.name);
+  else runExport(p => exportNotesJson(inside, [nb], nb.name, p));
 }
 
 // ---------- right-click menus ----------
@@ -1189,7 +1190,7 @@ async function renameNote(note) {
 function exportNotes(list, format) {
   const name = list.length === 1 ? displayTitle(list[0]) : `techo-${list.length}件`;
   if (format === 'html') exportNotesHtml(list, displayTitle, name);
-  else exportNotesJson(list, notebooks.filter(nb => list.some(n => n.notebookId === nb.id)), name);
+  else runExport(p => exportNotesJson(list, notebooks.filter(nb => list.some(n => n.notebookId === nb.id)), name, p));
 }
 
 const menuLabel = text => Object.assign(document.createElement('div'), { className: 'menu-label', textContent: text });
@@ -1436,24 +1437,22 @@ $('deleteBtn').onclick = () => {
   if (t) deleteTemplate(t); else if (currentId) trashNotes([currentId]);
 };
 
-$('exportBtn').onclick = async () => {
-  await exportAll();
-  store(BACKUP_KEY, Date.now());
-  hideNotice('backup');
-};
+$('exportBtn').onclick = () => runExport(exportAll, { full: true });
 $('importBtn').onclick = () => $('importInput').click();
 $('importInput').onchange = async e => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
   try {
-    const count = await importFile(file);
+    const count = await importFile(file, p => showNotice('export', `読み込み中… ${Math.round(p * 100)}%`));
+    hideNotice('export');
     await loadNotes();
     notebooks = await getAllNotebooks();
     await ensureNotebooks();
     renderAll();
     alert(`${count}件を読み込みました`);
   } catch (err) {
+    hideNotice('export');
     alert(`読み込めませんでした: ${err.message}`);
   }
 };
@@ -1535,7 +1534,7 @@ window.addEventListener('hashchange', route);
 // ---------- notices: a bar that stays until dealt with (the toast is for undo) ----------
 // One at a time; a more serious one replaces a lighter one, never the other way round.
 
-const NOTICE_RANK = { backup: 1, storage: 2, tab: 3, conflict: 4, error: 5 };
+const NOTICE_RANK = { backup: 1, export: 2, storage: 3, tab: 4, conflict: 5, error: 6 };
 let noticeKind = null;
 
 function showNotice(kind, message, actions = []) {
@@ -1563,7 +1562,7 @@ window.addEventListener('techo:write-failed', e => {
   showNotice('error',
     quota ? '端末の空き容量が足りず、保存できませんでした。ゴミ箱を空にするか不要な画像を消してから「もう一度保存」を押してください。'
       : `保存できませんでした(${e.detail?.name || 'エラー'})。「もう一度保存」を試し、だめなら書き出しでバックアップを取ってください。`,
-    [['もう一度保存', () => (unsavedIds.size ? retryUnsaved() : saveNow())], ['書き出し', () => exportAll()]]);
+    [['もう一度保存', () => (unsavedIds.size ? retryUnsaved() : saveNow())], ['書き出し', () => $('exportBtn').click()]]);
 });
 
 async function checkStorage() {
@@ -1574,6 +1573,33 @@ async function checkStorage() {
         [['ゴミ箱を開く', () => { hideNotice('storage'); go('trash'); }]]);
     }
   } catch { /* estimate unsupported */ }
+}
+
+// ---------- export ----------
+// A full backup can be 1GB+ and take a while: show progress, and say so when it fails.
+
+let exporting = false;
+
+// job(onProgress) → saved file name, or null if the save dialog was closed.
+// full: a whole-app backup, which is what the backup reminder counts.
+async function runExport(job, { full = false } = {}) {
+  if (exporting) return;
+  exporting = true;
+  try {
+    const name = await job(p => showNotice('export',
+      `書き出し中… ${Math.round(p * 100)}%  終わるまでこのタブを閉じないでください。`));
+    if (!name) return;
+    if (full) store(BACKUP_KEY, Date.now());
+    hideNotice('export');
+    hideNotice('backup');
+    showToast(`「${name}」に書き出しました`);
+  } catch (err) {
+    hideNotice('export');
+    showNotice('error', `書き出しに失敗しました(${err.name}: ${err.message})`,
+      [['もう一度', () => { hideNotice('error'); runExport(job, { full }); }]]);
+  } finally {
+    exporting = false;
+  }
 }
 
 // ---------- backup reminder ----------

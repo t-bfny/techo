@@ -1,6 +1,6 @@
 {
   "name": "techo",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "description": "Evernote代替の自作メモPWA",
   "scripts": {
     "dev": "vite --host",

@@ -1,6 +1,6 @@
 // Until sync exists, data lives only in this browser. Export/import is the safety net.
 import {
-  getAllNotes, getAllAttachments, getAllNotebooks, getNote, putNote, putAttachment, putNotebook, getAttachment,
+  getAllNotes, getAttachmentIds, getAllNotebooks, getNote, putNote, putAttachment, putNotebook, getAttachment,
 } from './db.js';
 import { sanitizeHtml } from './sanitize.js';
 import { fillToc } from './toc.js';
@@ -33,22 +33,90 @@ async function attachmentsFor(ids) {
   return out;
 }
 
-function writeJson(payload, filename) {
-  const json = JSON.stringify({ app: 'techo', version: 1, exportedAt: Date.now(), ...payload });
-  download(new Blob([json], { type: 'application/json' }), filename);
+// Backups can be far bigger than one JS string may hold (an Evernote import with images is
+// easily 1GB+), so they are written record by record, one record per line:
+//   {"app":"techo","version":2,"exportedAt":…,"records":[
+//   {"kind":"notebook","data":{…}},
+//   …
+//   ]}
+// The whole file is still valid JSON; importFile reads it line by line.
+
+// Where the backup goes. On PC Chrome/Edge a save dialog picks the place and the file is
+// streamed to disk; elsewhere the parts collect in a Blob (no single huge string) and download.
+// Must be the first await after the click, while the browser still counts it as user action.
+async function openSink(filename) {
+  if (window.showSaveFilePicker) {
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'techoのバックアップ', accept: { 'application/json': ['.json'] } }],
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') return null; // closed the dialog
+      throw err;
+    }
+    const w = await handle.createWritable();
+    return { name: handle.name, write: s => w.write(s), close: () => w.close(), abort: () => w.abort().catch(() => {}) };
+  }
+  const parts = [];
+  return {
+    name: filename,
+    write: s => { parts.push(s); },
+    close: () => download(new Blob(parts, { type: 'application/json' }), filename),
+    abort: () => {},
+  };
 }
 
-export async function exportAll() {
-  const atts = await getAllAttachments();
-  const attachments = await Promise.all(atts.map(async a => ({
-    id: a.id, type: a.type, name: a.name, createdAt: a.createdAt, data: await toDataUrl(a.blob),
-  })));
-  writeJson({ notebooks: await getAllNotebooks(), notes: await getAllNotes(), attachments }, `techo-${today()}.json`);
+// collect() → {notebooks, notes, attachmentIds}; runs after the dialog, so the dialog opens
+// straight from the click. Attachments are read one at a time while writing.
+// onProgress(0..1). Returns the saved file name, or null if the save dialog was closed.
+async function writeBackup(filename, collect, onProgress = () => {}) {
+  const sink = await openSink(filename);
+  if (!sink) return null;
+  try {
+    const { notebooks, notes, attachmentIds } = await collect();
+    onProgress(0);
+    let buf = '', done = 0;
+    const total = notebooks.length + notes.length + attachmentIds.length || 1;
+    const flush = async (force) => {
+      if (buf && (force || buf.length > 1 << 20)) { await sink.write(buf); buf = ''; }
+    };
+    let first = true;
+    const record = async (kind, data) => {
+      buf += (first ? '' : ',\n') + JSON.stringify({ kind, data });
+      first = false;
+      await flush();
+      if (++done % 20 === 0) onProgress(done / total);
+    };
+    buf = `{"app":"techo","version":2,"exportedAt":${Date.now()},"records":[\n`;
+    for (const nb of notebooks) await record('notebook', nb);
+    for (const id of attachmentIds) {
+      const a = await getAttachment(id);
+      if (a) await record('attachment', { id: a.id, type: a.type, name: a.name, createdAt: a.createdAt, data: await toDataUrl(a.blob) });
+      else done++;
+    }
+    for (const n of notes) await record('note', n);
+    buf += '\n]}\n';
+    await flush(true);
+    await sink.close();
+    onProgress(1);
+    return sink.name;
+  } catch (err) {
+    await sink.abort();
+    throw err;
+  }
+}
+
+export function exportAll(onProgress) {
+  return writeBackup(`techo-${today()}.json`, async () => ({
+    notebooks: await getAllNotebooks(), notes: await getAllNotes(), attachmentIds: await getAttachmentIds(),
+  }), onProgress);
 }
 
 // Selected notes (and their notebooks/attachments) in the backup format, so 読み込み restores them.
-export async function exportNotesJson(notes, notebooks, name) {
-  writeJson({ notebooks, notes, attachments: await attachmentsFor(attIds(notes)) }, `${safeName(name)}.json`);
+export function exportNotesJson(notes, notebooks, name, onProgress) {
+  return writeBackup(`${safeName(name)}.json`, async () => ({ notebooks, notes, attachmentIds: attIds(notes) }), onProgress);
 }
 
 // A single self-contained HTML page (images inlined) that opens in any browser.
@@ -74,23 +142,68 @@ li[data-due]::after{content:' (' attr(data-due) ')';color:#888;font-size:.85em}i
   download(new Blob([html], { type: 'text/html' }), `${safeName(name)}.html`);
 }
 
+// Calls onLine for each line of the file without ever holding the whole file as one string.
+async function eachLine(file, onLine) {
+  const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let pieces = [];
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    let from = 0, nl;
+    while ((nl = value.indexOf('\n', from)) >= 0) {
+      pieces.push(value.slice(from, nl));
+      const line = pieces.join('');
+      pieces = [];
+      if ((await onLine(line)) === false) { reader.cancel(); return; }
+      from = nl + 1;
+    }
+    if (from < value.length) pieces.push(value.slice(from));
+  }
+  if (pieces.length) await onLine(pieces.join(''));
+}
+
 // Newer updatedAt wins, so importing an old backup never overwrites fresh edits.
-export async function importFile(file) {
-  const data = JSON.parse(await file.text());
-  if (data.app !== 'techo') throw new Error('techoのバックアップではありません');
+// onProgress(0..1) by bytes read.
+export async function importFile(file, onProgress = () => {}) {
   const existing = new Set((await getAllNotebooks()).map(nb => nb.id));
-  for (const nb of data.notebooks || []) {
-    if (!existing.has(nb.id)) await putNotebook(nb);
+  let count = 0, read = 0, n = 0;
+  const put = async (kind, d) => {
+    if (kind === 'notebook') {
+      if (!existing.has(d.id)) await putNotebook(d);
+    } else if (kind === 'attachment') {
+      const blob = await (await fetch(d.data)).blob();
+      await putAttachment({ id: d.id, blob, type: d.type, name: d.name, createdAt: d.createdAt });
+    } else if (kind === 'note') {
+      const cur = await getNote(d.id);
+      // A backup file may come from someone else: never trust its HTML.
+      if (!cur || cur.updatedAt < d.updatedAt) { await putNote({ ...d, html: sanitizeHtml(d.html) }); count++; }
+    }
+  };
+
+  let lineMode = null; // decided by the first line: v2 (one record per line) or older single JSON
+  await eachLine(file, async line => {
+    read += line.length + 1;
+    if (lineMode === null) {
+      lineMode = /^\{"app":"techo","version":2,/.test(line);
+      if (!lineMode) return false;
+      return true;
+    }
+    const rec = line.replace(/,$/, '');
+    if (!rec.startsWith('{"kind":')) return true; // the closing ]} line
+    const { kind, data } = JSON.parse(rec);
+    await put(kind, data);
+    if (++n % 20 === 0) onProgress(Math.min(1, read / file.size));
+    return true;
+  });
+
+  if (!lineMode) {
+    // Backups from v0.14.1 and earlier: one JSON document.
+    const data = JSON.parse(await file.text());
+    if (data.app !== 'techo') throw new Error('techoのバックアップではありません');
+    for (const nb of data.notebooks || []) await put('notebook', nb);
+    for (const a of data.attachments || []) await put('attachment', a);
+    for (const d of data.notes || []) await put('note', d);
   }
-  for (const a of data.attachments || []) {
-    const blob = await (await fetch(a.data)).blob();
-    await putAttachment({ id: a.id, blob, type: a.type, name: a.name, createdAt: a.createdAt });
-  }
-  let count = 0;
-  for (const n of data.notes || []) {
-    const cur = await getNote(n.id);
-    // A backup file may come from someone else: never trust its HTML.
-    if (!cur || cur.updatedAt < n.updatedAt) { await putNote({ ...n, html: sanitizeHtml(n.html) }); count++; }
-  }
+  onProgress(1);
   return count;
 }

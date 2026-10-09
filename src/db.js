@@ -79,6 +79,7 @@ export const deleteNotebook = id => tx('notebooks', 'readwrite', s => s.delete(i
 
 export const getAttachment =id => tx('attachments', 'readonly', s => s.get(id));
 export const getAllAttachments = () => tx('attachments', 'readonly', s => s.getAll());
+export const getAttachmentIds = () => tx('attachments', 'readonly', s => s.getAllKeys());
 export const putAttachment = att => tx('attachments', 'readwrite', s => s.put(att));
 export const deleteAttachment = id => tx('attachments', 'readwrite', s => s.delete(id));
 
