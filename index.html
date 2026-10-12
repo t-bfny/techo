@@ -33,14 +33,10 @@
         <div id="notebookList"></div>
         <button class="side-item sep-top" data-go="trash"><span>ゴミ箱</span><span class="n" id="countTrash"></span></button>
       </div>
-      <div class="side-import">
-        <button id="enexBtn">Evernoteから取り込み</button>
-        <input id="enexInput" type="file" accept=".enex" multiple hidden>
-      </div>
       <footer class="bar small">
         <button id="exportBtn">書き出し</button>
-        <button id="importBtn">読み込み</button>
-        <input id="importInput" type="file" accept="application/json" hidden>
+        <button id="importBtn" title="techoのバックアップ(.json)とEvernoteの書き出し(.enex)。複数まとめて選べます">読み込み</button>
+        <input id="importInput" type="file" accept=".json,.enex,application/json" multiple hidden>
         <span class="grow"></span>
         <span id="appVersion" class="dim"></span>
       </footer>

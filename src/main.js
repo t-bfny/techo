@@ -1465,57 +1465,41 @@ $('deleteBtn').onclick = () => {
 
 $('exportBtn').onclick = () => runExport(exportAll, { full: true });
 $('importBtn').onclick = () => $('importInput').click();
+// One button for both: techo backups (.json) and Evernote exports (.enex, one per notebook).
 $('importInput').onchange = async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  try {
-    const count = await importFile(file, p => showNotice('export', `読み込み中… ${Math.round(p * 100)}%`));
-    hideNotice('export');
-    await loadNotes();
-    notebooks = await getAllNotebooks();
-    await ensureNotebooks();
-    renderAll();
-    alert(`${count}件を読み込みました`);
-  } catch (err) {
-    hideNotice('export');
-    alert(`読み込めませんでした: ${err.message}`);
-  }
-};
-
-$('enexBtn').onclick = () => $('enexInput').click();
-$('enexInput').onchange = async e => {
   const files = [...e.target.files];
   e.target.value = '';
   if (!files.length) return;
-  const btn = $('enexBtn');
-  btn.disabled = true;
-  const results = [];
-  try {
-    for (const [fi, file] of files.entries()) {
-      results.push(await importEnex(file, (done, fraction) => {
-        btn.textContent = `取り込み中 ${fi + 1}/${files.length}ファイル目 ${done}件 (${Math.round(fraction * 100)}%)`;
-      }));
+  const lines = [];
+  for (const [fi, file] of files.entries()) {
+    const of = files.length > 1 ? `${fi + 1}/${files.length}ファイル目 ` : '';
+    try {
+      if (/\.enex$/i.test(file.name)) {
+        const r = await importEnex(file, (done, fraction) =>
+          showNotice('export', `取り込み中… ${of}${done}件 (${Math.round(fraction * 100)}%)`));
+        lines.push([
+          `${r.notebook}: ${r.added}件を追加`,
+          r.updated && `${r.updated}件を取り込み直し`,
+          r.repaired && `${r.repaired}件のタスクを修復`,
+          r.skipped && `techoで編集済み・ゴミ箱の${r.skipped}件はそのまま`,
+          r.failed.length && `読めなかった${r.failed.length}件: ${r.failed.join(' / ')}`,
+        ].filter(Boolean).join('、'));
+      } else {
+        const count = await importFile(file, p => showNotice('export', `読み込み中… ${of}${Math.round(p * 100)}%`));
+        lines.push(`${file.name}: ${count}件を読み込みました`);
+      }
+    } catch (err) {
+      lines.push(`${file.name}: 読み込めませんでした(${err.message})`);
     }
-  } catch (err) {
-    alert(`取り込みに失敗しました: ${err.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Evernoteから取り込み';
   }
+  hideNotice('export');
   await loadNotes();
   notebooks = await getAllNotebooks();
+  await ensureNotebooks();
   renderAll();
-  if (results.length) {
-    alert(results.map(r => [
-      `${r.notebook}: ${r.added}件を追加`,
-      r.updated && `${r.updated}件を取り込み直し`,
-      r.repaired && `${r.repaired}件のタスクを修復`,
-      r.skipped && `techoで編集済み・ゴミ箱の${r.skipped}件はそのまま`,
-      r.failed.length && `読めなかった${r.failed.length}件: ${r.failed.join(' / ')}`,
-    ].filter(Boolean).join('、')).join('\n'));
-  }
+  alert(lines.join('\n'));
 };
+
 
 $('bulkDelete').onclick = () => trashNotes([...selected]);
 $('bulkClear').onclick = clearSelection;
@@ -1748,5 +1732,5 @@ registerSW({ immediate: true });
   await route();
   if (!SOLO) { checkStorage(); checkBackupReminder(); } // the main window already says these
   const leftover = notes.filter(n => n.html?.includes(PLACEHOLDER)).length;
-  if (leftover) showToast(`${leftover}件のノートにEvernoteのタスクが未変換です。その.enexを取り込み直すと直ります`, false);
+  if (leftover) showToast(`${leftover}件のノートにEvernoteのタスクが未変換です。その.enexを「読み込み」し直すと直ります`, false);
 })();

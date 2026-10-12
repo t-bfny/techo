@@ -464,8 +464,6 @@ button.side-head:hover { color: var(--text); }
 #stageBody h2 { font-size: 1.15em; padding-top: 0.6em; border-top: 1px solid var(--border); }
 #stageBody h3 { font-size: 1.05em; }
 
-.side-import { padding: 8px 12px; border-top: 1px solid var(--border); }
-.side-import button { width: 100%; font-size: 14.5px; }
 
 /* ---------- views: home / notebooks replace the list + editor ---------- */
 
