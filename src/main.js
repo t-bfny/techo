@@ -157,6 +157,16 @@ async function ensureNotebooks() {
     await putNotebook(nb);
     notebooks.push(nb);
   }
+  // Two notebooks with one name, one of them empty (left over from restoring a backup made
+  // on another device before imports merged them): drop the empty one.
+  const used = new Set([...notes, ...trashed, ...templates].map(n => n.notebookId));
+  for (const nb of [...notebooks]) {
+    const twin = notebooks.find(o => o !== nb && o.name === nb.name);
+    if (twin && !used.has(nb.id) && !nb.pinned && (used.has(twin.id) || nb.createdAt > twin.createdAt)) {
+      await deleteNotebook(nb.id);
+      notebooks = notebooks.filter(x => x !== nb);
+    }
+  }
   const ids = new Set(notebooks.map(nb => nb.id));
   for (const n of notes) {
     if (!ids.has(n.notebookId)) { n.notebookId = defaultNotebook().id; await putNote(n); }

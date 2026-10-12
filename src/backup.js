@@ -165,18 +165,31 @@ async function eachLine(file, onLine) {
 // Newer updatedAt wins, so importing an old backup never overwrites fresh edits.
 // onProgress(0..1) by bytes read.
 export async function importFile(file, onProgress = () => {}) {
-  const existing = new Set((await getAllNotebooks()).map(nb => nb.id));
+  const here = await getAllNotebooks();
+  const existing = new Set(here.map(nb => nb.id));
+  const byName = new Map(here.map(nb => [nb.name, nb.id]));
+  // A backup from another device has its own ids: its "マイノート" (or any notebook whose
+  // name is already here) joins the one on this device instead of becoming a second one.
+  // Notebooks come first in the file, so the mapping is ready before the notes.
+  const sameAs = new Map();
   let count = 0, read = 0, n = 0;
   const put = async (kind, d) => {
     if (kind === 'notebook') {
-      if (!existing.has(d.id)) await putNotebook(d);
+      if (existing.has(d.id)) return;
+      if (byName.has(d.name)) { sameAs.set(d.id, byName.get(d.name)); return; }
+      await putNotebook(d);
+      existing.add(d.id);
+      byName.set(d.name, d.id);
     } else if (kind === 'attachment') {
       const blob = await (await fetch(d.data)).blob();
       await putAttachment({ id: d.id, blob, type: d.type, name: d.name, createdAt: d.createdAt });
     } else if (kind === 'note') {
       const cur = await getNote(d.id);
       // A backup file may come from someone else: never trust its HTML.
-      if (!cur || cur.updatedAt < d.updatedAt) { await putNote({ ...d, html: sanitizeHtml(d.html) }); count++; }
+      if (!cur || cur.updatedAt < d.updatedAt) {
+        await putNote({ ...d, notebookId: sameAs.get(d.notebookId) ?? d.notebookId, html: sanitizeHtml(d.html) });
+        count++;
+      }
     }
   };
 
