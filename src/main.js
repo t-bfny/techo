@@ -20,14 +20,16 @@ import { exportAll, importFile, exportNotesJson, exportNotesHtml } from './backu
 import { importEnex, PLACEHOLDER, htmlToText } from './enex.js';
 import { JaAutolink } from './autolink.js';
 import { sanitizeHtml } from './sanitize.js';
+import { t as tr, LANG, LOCALE, setLang, translatePage, notebookKey } from './i18n.js';
 import { TableOfContents, fillToc } from './toc.js';
 import { Indent, KeepTab } from './indent.js';
 import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
 
 const $ = id => document.getElementById(id);
+translatePage(); // index.html is written in Japanese
 
 // Outline pushpin shown next to notes pinned to the top of their notebook.
-const PIN_ICON = '<svg class="pin" viewBox="0 0 16 16" aria-label="ピン留め"><path d="M10.5 1.5l4 4-2 1-2.5 2.5.5 3.5-1.5 1.5-3-3-3.5 3.5-.5-.5L5.5 10.5l-3-3L4 6l3.5.5L10 4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+const PIN_ICON = `<svg class="pin" viewBox="0 0 16 16" aria-label="${tr('ピン留め済み')}"><path d="M10.5 1.5l4 4-2 1-2.5 2.5.5 3.5-1.5 1.5-3-3-3.5 3.5-.5-.5L5.5 10.5l-3-3L4 6l3.5.5L10 4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
 
 let notes = [];          // in-memory copy for list + search (1000 notes fits easily); excludes trash
 let trashed = [];        // notes with deletedAt, kept for TRASH_DAYS
@@ -81,7 +83,7 @@ const editor = new Editor({
     TextStyle, Color,
     Highlight.configure({ multicolor: true }),
     TaskList, DueTaskItem.configure({ nested: true }),
-    Placeholder.configure({ placeholder: '本文' }),
+    Placeholder.configure({ placeholder: tr('本文#placeholder') }),
     JaAutolink,
     TableOfContents,
     Indent, KeepTab,
@@ -127,12 +129,12 @@ setupToolbar(editor, {
   image: () => $('imageInput').click(),
   file: () => $('fileInput').click(),
   youtube: () => {
-    const src = prompt('YouTubeのURL');
-    if (src && !insertYoutubeFromText(src)) alert('YouTubeのURLとして読めませんでした');
+    const src = prompt(tr('YouTubeのURL'));
+    if (src && !insertYoutubeFromText(src)) alert(tr('YouTubeのURLとして読めませんでした'));
   },
   link: () => {
     const prev = editor.getAttributes('link').href || '';
-    const href = prompt('リンク先のURL(空にすると解除)', prev);
+    const href = prompt(tr('リンク先のURL(空にすると解除)'), prev);
     if (href === null) return;
     const chain = editor.chain().focus().extendMarkRange('link');
     if (!href.trim()) { chain.unsetLink().run(); return; }
@@ -153,7 +155,7 @@ const notebookName = id => notebooks.find(nb => nb.id === id)?.name || '';
 // Every note must belong to a notebook; older data and imports may not.
 async function ensureNotebooks() {
   if (!notebooks.length) {
-    const nb = { id: uid(), name: 'マイノート', createdAt: Date.now() };
+    const nb = { id: uid(), name: tr('マイノート'), createdAt: Date.now() };
     await putNotebook(nb);
     notebooks.push(nb);
   }
@@ -161,7 +163,7 @@ async function ensureNotebooks() {
   // on another device before imports merged them): drop the empty one.
   const used = new Set([...notes, ...trashed, ...templates].map(n => n.notebookId));
   for (const nb of [...notebooks]) {
-    const twin = notebooks.find(o => o !== nb && o.name === nb.name);
+    const twin = notebooks.find(o => o !== nb && notebookKey(o.name) === notebookKey(nb.name));
     if (twin && !used.has(nb.id) && !nb.pinned && (used.has(twin.id) || nb.createdAt > twin.createdAt)) {
       await deleteNotebook(nb.id);
       notebooks = notebooks.filter(x => x !== nb);
@@ -221,8 +223,8 @@ async function trashNotes(ids, { record = true } = {}) {
   tabs = tabs.filter(t => !set.has(t));
   store(TABS_KEY, tabs);
   if (record) {
-    const label = moved.length === 1 ? `「${displayTitle(moved[0])}」` : `${moved.length}件`;
-    pushUndo(`${label}をゴミ箱に移動しました`, () => restoreNotes(moved.map(n => n.id), { record: false }));
+    const label = moved.length === 1 ? tr('「{title}」', { title: displayTitle(moved[0]) }) : tr('{n}件', { n: moved.length });
+    pushUndo(tr('{label}をゴミ箱に移動しました', { label }), () => restoreNotes(moved.map(n => n.id), { record: false }));
   }
   if (wasOpen) {
     currentId = null;
@@ -244,16 +246,16 @@ async function restoreNotes(ids, { record = true } = {}) {
   }
   trashed = trashed.filter(n => !set.has(n.id));
   notes.push(...back);
-  if (record) pushUndo(`${back.length}件を復元しました`, () => trashNotes(back.map(n => n.id), { record: false }));
+  if (record) pushUndo(tr('{n}件を復元しました', { n: back.length }), () => trashNotes(back.map(n => n.id), { record: false }));
   renderAll();
 }
 
 function renderTrashPage() {
   const list = [...trashed].sort((a, b) => b.deletedAt - a.deletedAt);
-  $('trashCount').textContent = `${list.length}件`;
+  $('trashCount').textContent = tr('{n}件', { n: list.length });
   $('emptyTrashBtn').disabled = !list.length;
   $('trashRows').replaceChildren(...(list.length ? [Object.assign(document.createElement('div'), { className: 'rows' })] : [
-    Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ゴミ箱は空です' }),
+    Object.assign(document.createElement('p'), { className: 'side-empty', textContent: tr('ゴミ箱は空です') }),
   ]));
   const box = $('trashRows').querySelector('.rows');
   if (!box) return;
@@ -262,9 +264,9 @@ function renderTrashPage() {
     const row = document.createElement('div');
     row.className = 'trash-row';
     row.innerHTML = '<div class="trash-main"><span class="task-t ellipsis"></span><span class="dim ellipsis"></span></div>'
-      + '<button class="mini">復元</button><button class="mini danger">完全に削除</button>';
+      + `<button class="mini">${tr('復元')}</button><button class="mini danger">${tr('完全に削除')}</button>`;
     row.querySelector('.task-t').textContent = displayTitle(n);
-    row.querySelector('.dim').textContent = `${notebookName(n.notebookId) || '(削除したノートブック)'} · ${fmtDate(n.deletedAt)}に削除 · あと${left}日`;
+    row.querySelector('.dim').textContent = `${notebookName(n.notebookId) || tr('(削除したノートブック)')} · ${tr('{date}に削除 · あと{left}日', { date: fmtDate(n.deletedAt), left })}`;
     const [restore, del] = row.querySelectorAll('button');
     restore.dataset.restore = n.id;
     del.dataset.purge = n.id;
@@ -295,7 +297,7 @@ async function undoLast() {
   const action = undoStack.pop();
   if (!action) return;
   await action.undo();
-  showToast('元に戻しました', false);
+  showToast(tr('元に戻しました'), false);
 }
 
 // ---------- selection (Ctrl/Shift+click in the note list) ----------
@@ -315,7 +317,7 @@ async function moveNotes(ids, notebookId) {
   if (!moved.length) return;
   const before = moved.map(n => [n, n.notebookId]);
   for (const n of moved) { n.notebookId = notebookId; await putNote(n); }
-  pushUndo(`${moved.length}件を「${notebookName(notebookId)}」へ移動しました`, async () => {
+  pushUndo(tr('{n}件を「{nb}」へ移動しました', { n: moved.length, nb: notebookName(notebookId) }), async () => {
     for (const [n, prev] of before) { n.notebookId = prev; await putNote(n); }
     renderAll();
   });
@@ -327,7 +329,7 @@ async function setPinTop(ids, value) {
   const changed = notes.filter(n => ids.includes(n.id) && !!n.pinTop !== value);
   if (!changed.length) return;
   for (const n of changed) { n.pinTop = value; await putNote(n); }
-  pushUndo(`${changed.length}件を${value ? 'ピン留め' : 'ピン留めから外'}しました`, async () => {
+  pushUndo(tr(value ? '{n}件をピン留めしました' : '{n}件をピン留めから外しました', { n: changed.length }), async () => {
     for (const n of changed) { n.pinTop = !value; await putNote(n); }
     renderAll();
   });
@@ -338,7 +340,7 @@ async function setPinned(ids, pinned) {
   const changed = notes.filter(n => ids.includes(n.id) && !!n.pinned !== pinned);
   if (!changed.length) return;
   for (const n of changed) { n.pinned = pinned; await putNote(n); }
-  pushUndo(`${changed.length}件を${pinned ? 'ショートカットに追加' : 'ショートカットから外'}しました`, async () => {
+  pushUndo(tr(pinned ? '{n}件をショートカットに追加しました' : '{n}件をショートカットから外しました', { n: changed.length }), async () => {
     for (const n of changed) { n.pinned = !pinned; await putNote(n); }
     renderAll();
   });
@@ -391,7 +393,7 @@ async function retryUnsaved() {
     if (!n) { unsavedIds.delete(id); continue; }
     try { await putNote(n); unsavedIds.delete(id); } catch { return; } // the failure shows the notice again
   }
-  showToast('保存しました', false);
+  showToast(tr('保存しました'), false);
 }
 
 // Closing the tab with unsaved edits would lose them.
@@ -419,7 +421,7 @@ async function leaveCurrent() {
 
 // ---------- rendering ----------
 
-const baseTitle = n => n.title || (n.text || '').split('\n').map(s => s.trim()).find(Boolean) || '無題';
+const baseTitle = n => n.title || (n.text || '').split('\n').map(s => s.trim()).find(Boolean) || tr('無題');
 
 // ---------- numbering (per notebook, opt-in) ----------
 // Notes in a numbered notebook are counted in creation order. A title that already carries a
@@ -547,9 +549,9 @@ function fmtDate(ts) {
   const d = new Date(ts);
   const now = new Date();
   if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString(LOCALE, { hour: LANG === 'ja' ? '2-digit' : 'numeric', minute: '2-digit' });
   }
-  return d.toLocaleDateString('ja-JP', d.getFullYear() === now.getFullYear()
+  return d.toLocaleDateString(LOCALE, d.getFullYear() === now.getFullYear()
     ? { month: 'numeric', day: 'numeric' }
     : { year: 'numeric', month: 'numeric', day: 'numeric' });
 }
@@ -581,7 +583,7 @@ function shortcutItems(counts, isActive) {
     .map(n => sideItem(displayTitle(n), null, isActive('note', n.id), { note: n.id }));
   const items = [...nbs, ...ns];
   return items.length ? items
-    : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ノートやノートブックの「ショートカット」で追加' })];
+    : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: tr('ノートやノートブックの「ショートカット」で追加') })];
 }
 
 function renderSidebar() {
@@ -631,11 +633,11 @@ function renderHomeSearch() {
   });
   const head = document.createElement('div');
   head.className = 'hit-head';
-  head.textContent = found.length ? `${found.length}件` : '見つかりませんでした';
+  head.textContent = found.length ? tr('{n}件', { n: found.length }) : tr('見つかりませんでした');
   if (found.length > HOME_RESULTS) {
     const more = document.createElement('button');
     more.className = 'link-plain';
-    more.textContent = `一覧で${found.length}件すべてを見る`;
+    more.textContent = tr('一覧で{n}件すべてを見る', { n: found.length });
     more.onclick = () => showAllResults(q);
     head.append(more);
   }
@@ -649,7 +651,7 @@ function showAllResults(q) {
 }
 
 function renderHome() {
-  $('homeDate').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+  $('homeDate').textContent = new Date().toLocaleDateString(LOCALE, { month: 'long', day: 'numeric', weekday: 'short' });
   const open = allTasks(notes).filter(t => !t.checked).length;
   $('homeStats').textContent = `${notes.length} notes · ${notebooks.length} notebooks · ${open} tasks`;
   $('homeRecent').replaceChildren(...recentNotes(8).map(n => {
@@ -662,7 +664,7 @@ function renderHome() {
     card.children[2].textContent = `${fmtDate(n.updatedAt)} · ${notebookName(n.notebookId)}`;
     return card;
   }));
-  if (!notes.length) $('homeRecent').append(Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'まだノートがありません' }));
+  if (!notes.length) $('homeRecent').append(Object.assign(document.createElement('p'), { className: 'side-empty', textContent: tr('まだノートがありません') }));
   const counts = notebookCounts();
   $('homeShortcuts').replaceChildren(...shortcutItems(counts, () => false));
   const today = isoDay();
@@ -679,7 +681,7 @@ function renderNotebooksPage() {
   const counts = notebookCounts();
   const byNb = {};
   for (const n of notes) (byNb[n.notebookId] ||= []).push(n);
-  $('notebookCount').textContent = `${notebooks.length}冊`;
+  $('notebookCount').textContent = tr('{n}冊', { n: notebooks.length });
 
   const rows = [];
   for (const nb of [...notebooks].sort((a, b) => byName(a.name, b.name))) {
@@ -735,7 +737,7 @@ function taskRow(t) {
 function renderTasksPage() {
   const tasks = allTasks(notes);
   const open = tasks.filter(t => !t.checked);
-  $('taskCount').textContent = `未完了 ${open.length}件`;
+  $('taskCount').textContent = tr('未完了 {n}件', { n: open.length });
   for (const b of document.querySelectorAll('[data-taskmode]')) b.classList.toggle('on', b.dataset.taskmode === taskMode);
   const groups = taskMode === 'open'
     ? groupOpenTasks(open)
@@ -743,14 +745,14 @@ function renderTasksPage() {
   const out = groups.map(([label, list]) => {
     const sec = document.createElement('section');
     sec.innerHTML = '<h2 class="page-h"></h2><div class="rows"></div>';
-    sec.firstChild.textContent = `${label} ${list.length}`;
+    sec.firstChild.textContent = `${tr(label)} ${list.length}`;
     sec.lastChild.append(...list.map(taskRow));
     return sec;
   });
   if (!out.length) {
     out.push(Object.assign(document.createElement('p'), {
       className: 'side-empty',
-      textContent: taskMode === 'open' ? 'ノートにチェックリストを書くと、ここにまとめて出ます' : '完了したタスクはまだありません',
+      textContent: tr(taskMode === 'open' ? 'ノートにチェックリストを書くと、ここにまとめて出ます' : '完了したタスクはまだありません'),
     }));
   }
   $('taskGroups').replaceChildren(...out);
@@ -786,7 +788,7 @@ async function renderFilesPage() {
   const isImg = a => (a.type || '').startsWith('image/');
   const shown = atts.filter(a => fileMode === 'all' || (fileMode === 'image') === isImg(a))
     .sort((a, b) => b.createdAt - a.createdAt);
-  $('fileCount').textContent = `${shown.length}件`;
+  $('fileCount').textContent = tr('{n}件', { n: shown.length });
   const tiles = await Promise.all(shown.map(async a => {
     const url = await attachmentUrl(a.id);
     const note = notes.find(n => n.id === refs.get(a.id));
@@ -806,7 +808,7 @@ async function renderFilesPage() {
     }
     const link = tile.querySelector('.file-name');
     link.href = await attachmentLink(a.id);
-    link.textContent = a.name || (isImg(a) ? '画像' : 'ファイル');
+    link.textContent = a.name || tr(isImg(a) ? '画像' : 'ファイル#one');
     if (a.name) link.download = a.name;
     const nb = tile.querySelector('.file-note');
     nb.textContent = displayTitle(note);
@@ -815,19 +817,19 @@ async function renderFilesPage() {
   }));
   if (view !== 'files') return; // navigated away while loading
   $('fileGrid').replaceChildren(...(tiles.length ? tiles
-    : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: 'ノートに画像やファイルを入れると、ここに並びます' })]));
+    : [Object.assign(document.createElement('p'), { className: 'side-empty', textContent: tr('ノートに画像やファイルを入れると、ここに並びます') })]));
 }
 
 function renderBulkBar() {
   $('bulkBar').hidden = !selected.size;
   if (!selected.size) return;
-  $('bulkCount').textContent = `${selected.size}件を選択中`;
+  $('bulkCount').textContent = tr('{n}件を選択中', { n: selected.size });
   $('bulkMove').replaceChildren(
-    Object.assign(document.createElement('option'), { value: '', textContent: 'ノートブックへ移動' }),
+    Object.assign(document.createElement('option'), { value: '', textContent: tr('ノートブックへ移動') }),
     ...[...notebooks].sort((a, b) => byName(a.name, b.name)).map(nb => Object.assign(document.createElement('option'), { value: nb.id, textContent: nb.name })),
   );
   const allPinned = [...selected].every(id => notes.find(n => n.id === id)?.pinned);
-  $('bulkPin').textContent = allPinned ? 'ショートカットから外す' : 'ショートカットに追加';
+  $('bulkPin').textContent = tr(allPinned ? 'ショートカットから外す' : 'ショートカットに追加');
 }
 
 function renderList() {
@@ -837,16 +839,16 @@ function renderList() {
   // Searching inside a notebook or shortcuts: say how many hits the rest of the notes have.
   const elsewhere = terms.length && filter.type !== 'all' ? notes.filter(n => !inFilter(n) && matches(n, terms)).length : 0;
   $('searchAll').hidden = !elsewhere;
-  $('searchAll').textContent = `ほかのノートにも${elsewhere}件 — すべてのノートで検索`;
+  $('searchAll').textContent = tr('ほかのノートにも{n}件 — すべてのノートで検索', { n: elsewhere });
   // Inside a notebook, pinned notes stay on top whatever the sort; the rest follow in order.
   const shown = filter.type === 'notebook' ? [...sorted.filter(n => n.pinTop), ...sorted.filter(n => !n.pinTop)] : sorted;
   $('sortSelect').value = sort.key;
   $('sortDir').textContent = sort.dir === 'asc' ? '↑' : '↓';
-  $('sortDir').title = sort.dir === 'asc' ? '昇順(古い・小さい順)' : '降順(新しい・大きい順)';
+  $('sortDir').title = tr(sort.dir === 'asc' ? '昇順(古い・小さい順)' : '降順(新しい・大きい順)');
 
   $('filterName').textContent = filter.type === 'notebook' ? notebookName(filter.id)
-    : filter.type === 'shortcuts' ? 'ショートカット' : 'すべてのノート';
-  $('count').textContent = terms.length ? `${shown.length} / ${scoped.length}件` : `${scoped.length}件`;
+    : tr(filter.type === 'shortcuts' ? 'ショートカット' : 'すべてのノート');
+  $('count').textContent = terms.length ? tr('{shown} / {n}件', { shown: shown.length, n: scoped.length }) : tr('{n}件', { n: scoped.length });
   $('notebookTools').hidden = filter.type !== 'notebook';
   $('numberedMark').hidden = !notebooks.find(nb => nb.id === filter.id)?.numbered;
 
@@ -882,8 +884,8 @@ function renderTabs() {
     const tab = document.createElement('div');
     tab.className = 'tab' + (id === currentId ? ' active' : '');
     tab.dataset.id = id;
-    tab.innerHTML = '<span class="ellipsis"></span><button class="tab-close" title="閉じる">×</button>';
-    tab.firstChild.textContent = n ? (n.template ? `テンプレート: ${displayTitle(n)}` : displayTitle(n)) : '';
+    tab.innerHTML = `<span class="ellipsis"></span><button class="tab-close" title="${tr('閉じる')}">×</button>`;
+    tab.firstChild.textContent = n ? (n.template ? tr('テンプレート: {title}', { title: displayTitle(n) }) : displayTitle(n)) : '';
     return tab;
   }));
   $('tabList').querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -935,7 +937,7 @@ function openNote(id, { newTab = false } = {}) {
 async function openInWindow(id) {
   if (saveTimer) await saveNow();
   const w = window.open(`/?w=1#n/${id}`, `techo-${id}`, 'popup,width=860,height=920');
-  if (!w) { alert('新しいウィンドウを開けませんでした。ブラウザのポップアップの設定を確認してください。'); return; }
+  if (!w) { alert(tr('新しいウィンドウを開けませんでした。ブラウザのポップアップの設定を確認してください。')); return; }
   w.focus();
   if (tabs.includes(id)) closeTab(id);
 }
@@ -977,7 +979,7 @@ async function showNote(id) {
   $('emptyState').hidden = true;
   $('editorWrap').hidden = false;
   document.body.classList.add('show-editor');
-  if (SOLO) document.title = note.title || '無題';
+  if (SOLO) document.title = note.title || tr('無題');
   renderAll();
 }
 
@@ -1036,19 +1038,19 @@ async function newNote({ newTab = true } = {}) {
 
 const DATE_RE = /\d{4}-\d{2}-\d{2}/g;
 const fillDate = s => (s || '').replaceAll('{{date}}', isoDay());
-const templateLabel = t => (t.title || '無題').replaceAll('{{date}}', '〈日付〉');
+const templateLabel = t => (t.title || tr('無題')).replaceAll('{{date}}', tr('〈日付〉'));
 
 // Right-click → コピーを作成: same notebook, "… のコピー", attachments shared with the original.
 async function duplicateNotes(list) {
   if (saveTimer) await saveNow();
   const now = Date.now();
   const copies = list.map((n, i) => ({
-    ...n, id: uid(), title: `${baseTitle(n)} のコピー`, pinned: false, pinTop: false, sourceKey: undefined,
+    ...n, id: uid(), title: tr('{title} のコピー', { title: baseTitle(n) }), pinned: false, pinTop: false, sourceKey: undefined,
     createdAt: now + i, updatedAt: now + i,
   }));
   for (const c of copies) { delete c.sourceKey; await putNote(c); }
   notes.push(...copies);
-  pushUndo(`${copies.length === 1 ? `「${copies[0].title}」` : `${copies.length}件のコピー`}を作成しました`, async () => {
+  pushUndo(copies.length === 1 ? tr('「{title}」を作成しました', { title: copies[0].title }) : tr('{n}件のコピーを作成しました', { n: copies.length }), async () => {
     const ids = new Set(copies.map(c => c.id));
     for (const c of copies) await deleteNote(c.id);
     notes = notes.filter(n => !ids.has(n.id));
@@ -1068,7 +1070,7 @@ async function saveAsTemplate(note) {
   };
   await putNote(t);
   templates.push(t);
-  pushUndo(`テンプレート「${templateLabel(t)}」を保存しました`, async () => {
+  pushUndo(tr('テンプレート「{name}」を保存しました', { name: templateLabel(t) }), async () => {
     await deleteNote(t.id); // its attachments stay: the original note still uses them
     templates = templates.filter(x => x.id !== t.id);
     renderAll();
@@ -1100,7 +1102,7 @@ async function newFromTemplate(t, { newTab = true } = {}) {
 }
 
 async function deleteTemplate(t) {
-  if (!confirm(`テンプレート「${templateLabel(t)}」を削除しますか`)) return;
+  if (!confirm(tr('テンプレート「{name}」を削除しますか', { name: templateLabel(t) }))) return;
   const wasOpen = currentId === t.id;
   tabs = tabs.filter(id => id !== t.id);
   store(TABS_KEY, tabs);
@@ -1114,19 +1116,19 @@ function newMenu(anchor) {
   if (!templates.length) { newNote(); return; }
   const r = anchor.getBoundingClientRect();
   showMenuAt(r.left, r.bottom + 6, p => p.append(
-    menuItem('空のノート', () => newNote()),
+    menuItem(tr('空のノート'), () => newNote()),
     menuSep(),
-    menuLabel('テンプレートから'),
-    ...[...templates].sort((a, b) => byName(a.title || '', b.title || '')).map(t => menuItem(fillDate(t.title) || '無題', () => newFromTemplate(t))),
+    menuLabel(tr('テンプレートから')),
+    ...[...templates].sort((a, b) => byName(a.title || '', b.title || '')).map(t => menuItem(fillDate(t.title) || tr('無題'), () => newFromTemplate(t))),
   ));
 }
 
 function renderTemplatesPage() {
   const list = [...templates].sort((a, b) => byName(a.title || '', b.title || ''));
-  $('templateCount').textContent = `${list.length}件`;
+  $('templateCount').textContent = tr('{n}件', { n: list.length });
   if (!list.length) {
     $('templateRows').replaceChildren(Object.assign(document.createElement('p'), {
-      className: 'side-empty', textContent: '元にしたいノートを右クリック →「テンプレートとして保存」で作れます',
+      className: 'side-empty', textContent: tr('元にしたいノートを右クリック →「テンプレートとして保存」で作れます'),
     }));
     return;
   }
@@ -1135,9 +1137,9 @@ function renderTemplatesPage() {
     const row = document.createElement('div');
     row.className = 'trash-row';
     row.innerHTML = '<div class="trash-main"><span class="task-t ellipsis"></span><span class="dim ellipsis"></span></div>'
-      + '<button class="mini">使う</button><button class="mini">編集</button><button class="mini danger">削除</button>';
+      + `<button class="mini">${tr('使う')}</button><button class="mini">${tr('編集')}</button><button class="mini danger">${tr('削除')}</button>`;
     row.querySelector('.task-t').textContent = templateLabel(t);
-    row.querySelector('.dim').textContent = `作成先: ${notebookName(t.notebookId) || '(現在のノートブック)'} · 今日なら「${fillDate(t.title) || '無題'}」`;
+    row.querySelector('.dim').textContent = tr('作成先: {nb} · 今日なら「{title}」', { nb: notebookName(t.notebookId) || tr('(現在のノートブック)'), title: fillDate(t.title) || tr('無題') });
     const [use, edit, del] = row.querySelectorAll('button');
     use.dataset.useTemplate = t.id;
     edit.dataset.editTemplate = t.id;
@@ -1158,7 +1160,7 @@ function setFilter(f) {
 }
 
 async function createNotebook({ open = true } = {}) {
-  const name = prompt('新しいノートブックの名前')?.trim();
+  const name = prompt(tr('新しいノートブックの名前'))?.trim();
   if (!name) return;
   const nb = { id: uid(), name, pinned: false, createdAt: Date.now() };
   await putNotebook(nb);
@@ -1209,7 +1211,7 @@ async function lockScreenOn() {
 function enterStage() {
   $('stageBody').innerHTML = `<h1 data-note-title></h1>${sanitizeHtml(editor.getHTML())}`;
   const cur = notes.find(n => n.id === currentId);
-  $('stageBody').querySelector('h1').textContent = [cur && numberLabel(cur), $('titleInput').value || '無題'].filter(Boolean).join(' ');
+  $('stageBody').querySelector('h1').textContent = [cur && numberLabel(cur), $('titleInput').value || tr('無題')].filter(Boolean).join(' ');
   fillToc($('stageBody'));
   $('stage').hidden = false;
   stageFont();
@@ -1260,7 +1262,7 @@ const filterNotebook = () => notebooks.find(x => x.id === filter.id);
 async function toggleNumbering(nb) {
   nb.numbered = !nb.numbered;
   await putNotebook(nb);
-  pushUndo(`「${nb.name}」の連番を${nb.numbered ? 'オン' : 'オフ'}にしました`, async () => {
+  pushUndo(tr(nb.numbered ? '「{name}」の連番をオンにしました' : '「{name}」の連番をオフにしました', { name: nb.name }), async () => {
     nb.numbered = !nb.numbered;
     await putNotebook(nb);
     renderAll();
@@ -1271,7 +1273,7 @@ async function toggleNumbering(nb) {
 async function togglePinNotebook(nb) {
   nb.pinned = !nb.pinned;
   await putNotebook(nb);
-  pushUndo(`「${nb.name}」を${nb.pinned ? 'ショートカットに追加' : 'ショートカットから外'}しました`, async () => {
+  pushUndo(tr(nb.pinned ? '「{name}」をショートカットに追加しました' : '「{name}」をショートカットから外しました', { name: nb.name }), async () => {
     nb.pinned = !nb.pinned;
     await putNotebook(nb);
     renderAll();
@@ -1280,22 +1282,22 @@ async function togglePinNotebook(nb) {
 }
 
 async function renameNotebook(nb) {
-  const name = prompt('ノートブックの名前', nb.name)?.trim();
+  const name = prompt(tr('ノートブックの名前'), nb.name)?.trim();
   if (!name || name === nb.name) return;
   const before = nb.name;
   nb.name = name;
   await putNotebook(nb);
-  pushUndo(`ノートブック名を「${name}」に変更しました`, async () => { nb.name = before; await putNotebook(nb); renderAll(); });
+  pushUndo(tr('ノートブック名を「{name}」に変更しました', { name }), async () => { nb.name = before; await putNotebook(nb); renderAll(); });
   renderAll();
 }
 
 async function removeNotebook(nb) {
-  if (notebooks.length === 1) { alert('最後のノートブックは削除できません'); return; }
+  if (notebooks.length === 1) { alert(tr('最後のノートブックは削除できません')); return; }
   const inside = notes.filter(n => n.notebookId === nb.id);
   const fallback = [...notebooks].filter(x => x.id !== nb.id).sort(byCreated)[0];
   const msg = inside.length
-    ? `「${nb.name}」を削除します。中のノート${inside.length}件は「${fallback.name}」へ移動します。`
-    : `「${nb.name}」を削除しますか`;
+    ? tr('「{name}」を削除します。中のノート{n}件は「{to}」へ移動します。', { name: nb.name, n: inside.length, to: fallback.name })
+    : tr('「{name}」を削除しますか', { name: nb.name });
   if (!confirm(msg)) return;
   for (const n of inside) { n.notebookId = fallback.id; await putNote(n); }
   await deleteNotebook(nb.id);
@@ -1312,7 +1314,7 @@ function exportNotebook(nb, format) {
 // ---------- right-click menus ----------
 
 async function renameNote(note) {
-  const input = prompt('ノートの名前', note.title || '');
+  const input = prompt(tr('ノートの名前'), note.title || '');
   if (input === null || input.trim() === (note.title || '')) return;
   if (note.id === currentId && saveTimer) await saveNow();
   const before = note.title || '';
@@ -1324,11 +1326,11 @@ async function renameNote(note) {
     renderAll();
   };
   await apply(input.trim());
-  pushUndo(`名前を「${input.trim() || '無題'}」に変更しました`, () => apply(before));
+  pushUndo(tr('名前を「{name}」に変更しました', { name: input.trim() || tr('無題') }), () => apply(before));
 }
 
 function exportNotes(list, format) {
-  const name = list.length === 1 ? displayTitle(list[0]) : `techo-${list.length}件`;
+  const name = list.length === 1 ? displayTitle(list[0]) : tr('techo-{n}件', { n: list.length });
   if (format === 'html') exportNotesHtml(list, displayTitle, name);
   else runExport(p => exportNotesJson(list, notebooks.filter(nb => list.some(n => n.notebookId === nb.id)), name, p));
 }
@@ -1345,42 +1347,42 @@ function noteMenu(x, y, ids, extra = []) {
   const allTop = list.every(n => n.pinTop);
   showMenuAt(x, y, p => p.append(
     ...(one ? [
-      menuItem('開く', () => openNote(one.id)),
-      menuItem('新しいタブで開く', () => openNote(one.id, { newTab: true })),
-      ...(canWindow ? [menuItem('新しいウィンドウで開く', () => openInWindow(one.id))] : []),
-      menuItem('名前を変更', () => renameNote(one)),
-      menuItem('コピーを作成', () => duplicateNotes(list)),
-      menuItem('テンプレートとして保存', () => saveAsTemplate(one)),
-    ] : [menuLabel(`${list.length}件を選択中`), menuItem(`${list.length}件のコピーを作成`, () => duplicateNotes(list))]),
+      menuItem(tr('開く'), () => openNote(one.id)),
+      menuItem(tr('新しいタブで開く'), () => openNote(one.id, { newTab: true })),
+      ...(canWindow ? [menuItem(tr('新しいウィンドウで開く'), () => openInWindow(one.id))] : []),
+      menuItem(tr('名前を変更'), () => renameNote(one)),
+      menuItem(tr('コピーを作成'), () => duplicateNotes(list)),
+      menuItem(tr('テンプレートとして保存'), () => saveAsTemplate(one)),
+    ] : [menuLabel(tr('{n}件を選択中', { n: list.length })), menuItem(tr('{n}件のコピーを作成', { n: list.length }), () => duplicateNotes(list))]),
     ...extra,
     menuSep(),
-    menuItem(allTop ? 'ピン留めを外す' : 'ピン留め', () => setPinTop(ids, !allTop)),
-    menuItem(allPinned ? 'ショートカットから外す' : 'ショートカットに追加', () => setPinned(ids, !allPinned)),
-    menuItem('ノートブックへ移動…', () => showMenuAt(x, y, q => q.append(
-      menuLabel('移動先'),
+    menuItem(tr(allTop ? 'ピン留めを外す' : 'ピン留め'), () => setPinTop(ids, !allTop)),
+    menuItem(tr(allPinned ? 'ショートカットから外す' : 'ショートカットに追加'), () => setPinned(ids, !allPinned)),
+    menuItem(tr('ノートブックへ移動…'), () => showMenuAt(x, y, q => q.append(
+      menuLabel(tr('移動先')),
       ...sortedNotebooks().map(nb => menuItem(nb.name, () => moveNotes(ids, nb.id))),
     ))),
     menuSep(),
-    menuItem('書き出し(HTML)', () => exportNotes(list, 'html')),
-    menuItem('書き出し(techo形式 .json)', () => exportNotes(list, 'json')),
-    menuItem(one ? '印刷' : `${list.length}件を印刷`, () => printNotes(list)),
+    menuItem(tr('書き出し(HTML)'), () => exportNotes(list, 'html')),
+    menuItem(tr('書き出し(techo形式 .json)'), () => exportNotes(list, 'json')),
+    menuItem(one ? tr('印刷') : tr('{n}件を印刷', { n: list.length }), () => printNotes(list)),
     menuSep(),
-    danger(menuItem(one ? '削除' : `${list.length}件を削除`, () => trashNotes(ids))),
+    danger(menuItem(one ? tr('削除') : tr('{n}件を削除', { n: list.length }), () => trashNotes(ids))),
   ));
 }
 
 function notebookMenu(x, y, nb) {
   showMenuAt(x, y, p => p.append(
-    menuItem('開く', () => setFilter({ type: 'notebook', id: nb.id })),
-    menuItem('名前を変更', () => renameNotebook(nb)),
-    menuItem(nb.numbered ? '連番をオフにする' : '連番をオンにする', () => toggleNumbering(nb)),
-    menuItem(nb.pinned ? 'ショートカットから外す' : 'ショートカットに追加', () => togglePinNotebook(nb)),
+    menuItem(tr('開く'), () => setFilter({ type: 'notebook', id: nb.id })),
+    menuItem(tr('名前を変更'), () => renameNotebook(nb)),
+    menuItem(tr(nb.numbered ? '連番をオフにする' : '連番をオンにする'), () => toggleNumbering(nb)),
+    menuItem(tr(nb.pinned ? 'ショートカットから外す' : 'ショートカットに追加'), () => togglePinNotebook(nb)),
     menuSep(),
-    menuItem('書き出し(HTML)', () => exportNotebook(nb, 'html')),
-    menuItem('書き出し(techo形式 .json)', () => exportNotebook(nb, 'json')),
-    menuItem('印刷', () => printNotes(sortNotes(notes.filter(n => n.notebookId === nb.id)))),
+    menuItem(tr('書き出し(HTML)'), () => exportNotebook(nb, 'html')),
+    menuItem(tr('書き出し(techo形式 .json)'), () => exportNotebook(nb, 'json')),
+    menuItem(tr('印刷'), () => printNotes(sortNotes(notes.filter(n => n.notebookId === nb.id)))),
     menuSep(),
-    danger(menuItem('削除', () => removeNotebook(nb))),
+    danger(menuItem(tr('削除'), () => removeNotebook(nb))),
   ));
 }
 
@@ -1400,7 +1402,7 @@ async function printNotes(list) {
     art.innerHTML = '<h1 data-note-title></h1><div class="print-meta"></div>' + bodies[i];
     art.querySelector('h1').textContent = displayTitle(n);
     fillToc(art);
-    art.querySelector('.print-meta').textContent = `${notebookName(n.notebookId)} · ${new Date(n.updatedAt).toLocaleDateString('ja-JP')}`;
+    art.querySelector('.print-meta').textContent = `${notebookName(n.notebookId)} · ${new Date(n.updatedAt).toLocaleDateString(LOCALE)}`;
     return art;
   }));
   // Paper can't play video: print the YouTube link instead of the player.
@@ -1439,14 +1441,14 @@ document.addEventListener('contextmenu', e => {
     noteMenu(x, y, selected.has(id) ? [...selected] : [id]);
   } else if ((el = hit('.tab'))) {
     const id = el.dataset.id;
-    noteMenu(x, y, [id], [menuItem('タブを閉じる', () => closeTab(id))]);
+    noteMenu(x, y, [id], [menuItem(tr('タブを閉じる'), () => closeTab(id))]);
   } else if ((el = hit('.trash-row'))) {
     const id = el.querySelector('[data-restore]').dataset.restore;
     const n = trashed.find(t => t.id === id);
     showMenuAt(x, y, p => p.append(
-      menuItem('復元', () => restoreNotes([id])),
-      danger(menuItem('完全に削除', async () => {
-        if (n && confirm(`「${displayTitle(n)}」を完全に削除します。元に戻せません。`)) { await purge([n]); renderAll(); }
+      menuItem(tr('復元'), () => restoreNotes([id])),
+      danger(menuItem(tr('完全に削除'), async () => {
+        if (n && confirm(tr('「{title}」を完全に削除します。元に戻せません。', { title: displayTitle(n) }))) { await purge([n]); renderAll(); }
       })),
     ));
   } else if ((el = hit('[data-notebook]'))) {
@@ -1544,8 +1546,8 @@ document.addEventListener('keydown', e => {
 });
 $('titleInput').oninput = () => {
   scheduleSave();
-  $('crumbTitle').textContent = $('titleInput').value || '無題';
-  if (SOLO) document.title = $('titleInput').value || '無題';
+  $('crumbTitle').textContent = $('titleInput').value || tr('無題');
+  if (SOLO) document.title = $('titleInput').value || tr('無題');
 };
 $('titleInput').onkeydown = e => {
   if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); editor.commands.focus('start'); }
@@ -1570,9 +1572,9 @@ $('moreBtn').onclick = e => {
   showPopover(e.currentTarget, p => {
     p.classList.remove('swatches');
     p.append(
-      menuItem(note.pinned ? 'ショートカットから外す' : 'ショートカットに追加', () => $('pinBtn').click()),
-      menuItem('印刷', () => printNotes([note])),
-      Object.assign(menuItem('削除', () => $('deleteBtn').click()), { className: 'menu-item danger' }),
+      menuItem(tr(note.pinned ? 'ショートカットから外す' : 'ショートカットに追加'), () => $('pinBtn').click()),
+      menuItem(tr('印刷'), () => printNotes([note])),
+      Object.assign(menuItem(tr('削除'), () => $('deleteBtn').click()), { className: 'menu-item danger' }),
     );
   });
 };
@@ -1587,7 +1589,7 @@ $('fileInput').onchange = async e => {
     const href = await attachmentLink(id);
     editor.chain().focus().insertContent({
       type: 'paragraph',
-      content: [{ type: 'text', text: `添付: ${f.name}`, marks: [{ type: 'link', attrs: { href } }] }],
+      content: [{ type: 'text', text: tr('添付: {name}', { name: f.name }), marks: [{ type: 'link', attrs: { href } }] }],
     }).run();
   }
 };
@@ -1613,24 +1615,24 @@ $('importInput').onchange = async e => {
   if (!files.length) return;
   const lines = [];
   for (const [fi, file] of files.entries()) {
-    const of = files.length > 1 ? `${fi + 1}/${files.length}ファイル目 ` : '';
+    const of = files.length > 1 ? tr('{i}/{total}ファイル目 ', { i: fi + 1, total: files.length }) : '';
     try {
       if (/\.enex$/i.test(file.name)) {
         const r = await importEnex(file, (done, fraction) =>
-          showNotice('export', `取り込み中… ${of}${done}件 (${Math.round(fraction * 100)}%)`));
+          showNotice('export', tr('取り込み中… {of}{done}件 ({pct}%)', { of, done, pct: Math.round(fraction * 100) })));
         lines.push([
-          `${r.notebook}: ${r.added}件を追加`,
-          r.updated && `${r.updated}件を取り込み直し`,
-          r.repaired && `${r.repaired}件のタスクを修復`,
-          r.skipped && `techoで編集済み・ゴミ箱の${r.skipped}件はそのまま`,
-          r.failed.length && `読めなかった${r.failed.length}件: ${r.failed.join(' / ')}`,
-        ].filter(Boolean).join('、'));
+          tr('{nb}: {n}件を追加', { nb: r.notebook, n: r.added }),
+          r.updated && tr('{n}件を取り込み直し', { n: r.updated }),
+          r.repaired && tr('{n}件のタスクを修復', { n: r.repaired }),
+          r.skipped && tr('techoで編集済み・ゴミ箱の{n}件はそのまま', { n: r.skipped }),
+          r.failed.length && tr('読めなかった{n}件: {list}', { n: r.failed.length, list: r.failed.join(' / ') }),
+        ].filter(Boolean).join(tr('、')));
       } else {
-        const count = await importFile(file, p => showNotice('export', `読み込み中… ${of}${Math.round(p * 100)}%`));
-        lines.push(`${file.name}: ${count}件を読み込みました`);
+        const count = await importFile(file, p => showNotice('export', tr('読み込み中… {of}{pct}%', { of, pct: Math.round(p * 100) })));
+        lines.push(tr('{file}: {n}件を読み込みました', { file: file.name, n: count }));
       }
     } catch (err) {
-      lines.push(`${file.name}: 読み込めませんでした(${err.message})`);
+      lines.push(tr('{file}: 読み込めませんでした({msg})', { file: file.name, msg: err.message }));
     }
   }
   hideNotice('export');
@@ -1656,14 +1658,14 @@ $('trashView').addEventListener('click', async e => {
   if (b.dataset.restore) restoreNotes([b.dataset.restore]);
   if (b.dataset.purge) {
     const n = trashed.find(x => x.id === b.dataset.purge);
-    if (n && confirm(`「${displayTitle(n)}」を完全に削除します。元に戻せません。`)) { await purge([n]); renderAll(); }
+    if (n && confirm(tr('「{title}」を完全に削除します。元に戻せません。', { title: displayTitle(n) }))) { await purge([n]); renderAll(); }
   }
 });
 $('emptyTrashBtn').onclick = async () => {
-  if (!trashed.length || !confirm(`ゴミ箱の${trashed.length}件を完全に削除します。元に戻せません。`)) return;
+  if (!trashed.length || !confirm(tr('ゴミ箱の{n}件を完全に削除します。元に戻せません。', { n: trashed.length }))) return;
   await purge([...trashed]);
   renderAll();
-  showToast('ゴミ箱を空にしました', false);
+  showToast(tr('ゴミ箱を空にしました'), false);
 };
 
 $('toastUndo').onclick = () => { $('toast').hidden = true; undoLast(); };
@@ -1711,17 +1713,17 @@ $('noticeClose').onclick = () => hideNotice();
 window.addEventListener('techo:write-failed', e => {
   const quota = e.detail?.name === 'QuotaExceededError';
   showNotice('error',
-    quota ? '端末の空き容量が足りず、保存できませんでした。ゴミ箱を空にするか不要な画像を消してから「もう一度保存」を押してください。'
-      : `保存できませんでした(${e.detail?.name || 'エラー'})。「もう一度保存」を試し、だめなら書き出しでバックアップを取ってください。`,
-    [['もう一度保存', () => (unsavedIds.size ? retryUnsaved() : saveNow())], ['書き出し', () => $('exportBtn').click()]]);
+    quota ? tr('端末の空き容量が足りず、保存できませんでした。ゴミ箱を空にするか不要な画像を消してから「もう一度保存」を押してください。')
+      : tr('保存できませんでした({name})。「もう一度保存」を試し、だめなら書き出しでバックアップを取ってください。', { name: e.detail?.name || tr('エラー') }),
+    [[tr('もう一度保存'), () => (unsavedIds.size ? retryUnsaved() : saveNow())], [tr('書き出し'), () => $('exportBtn').click()]]);
 });
 
 async function checkStorage() {
   try {
     const { usage, quota } = await navigator.storage.estimate();
     if (quota && usage / quota > 0.9) {
-      showNotice('storage', `端末の保存容量が残りわずかです(${Math.round(usage / quota * 100)}%使用)。このままだと保存に失敗することがあります。`,
-        [['ゴミ箱を開く', () => { hideNotice('storage'); go('trash'); }]]);
+      showNotice('storage', tr('端末の保存容量が残りわずかです({pct}%使用)。このままだと保存に失敗することがあります。', { pct: Math.round(usage / quota * 100) }),
+        [[tr('ゴミ箱を開く'), () => { hideNotice('storage'); go('trash'); }]]);
     }
   } catch { /* estimate unsupported */ }
 }
@@ -1738,16 +1740,16 @@ async function runExport(job, { full = false } = {}) {
   exporting = true;
   try {
     const name = await job(p => showNotice('export',
-      `書き出し中… ${Math.round(p * 100)}%  終わるまでこのタブを閉じないでください。`));
+      tr('書き出し中… {pct}%  終わるまでこのタブを閉じないでください。', { pct: Math.round(p * 100) })));
     if (!name) return;
     if (full) store(BACKUP_KEY, Date.now());
     hideNotice('export');
     hideNotice('backup');
-    showToast(`「${name}」に書き出しました`);
+    showToast(tr('「{name}」に書き出しました', { name }));
   } catch (err) {
     hideNotice('export');
-    showNotice('error', `書き出しに失敗しました(${err.name}: ${err.message})`,
-      [['もう一度', () => { hideNotice('error'); runExport(job, { full }); }]]);
+    showNotice('error', tr('書き出しに失敗しました({name}: {msg})', { name: err.name, msg: err.message }),
+      [[tr('もう一度'), () => { hideNotice('error'); runExport(job, { full }); }]]);
   } finally {
     exporting = false;
   }
@@ -1766,18 +1768,18 @@ function checkBackupReminder() {
   const iosBrowser = /iPhone|iPad|iPod/.test(navigator.userAgent)
     && !matchMedia('(display-mode: standalone)').matches && !navigator.standalone;
   showNotice('backup',
-    (days === null ? 'まだ一度も書き出し(バックアップ)をしていません。' : `最後の書き出しから${days}日たちました。`)
-    + 'メモはこの端末のブラウザの中にしかありません。'
-    + (iosBrowser ? 'iPhoneでは、ホーム画面に追加しないまま7日間開かないとデータが消えることがあります。' : ''),
-    [['書き出し', () => $('exportBtn').click()], ['あとで', () => { store(SNOOZE_KEY, Date.now() + 3 * DAY); hideNotice('backup'); }]]);
+    (days === null ? tr('まだ一度も書き出し(バックアップ)をしていません。') : tr('最後の書き出しから{days}日たちました。', { days }))
+    + tr('メモはこの端末のブラウザの中にしかありません。')
+    + (iosBrowser ? tr('iPhoneでは、ホーム画面に追加しないまま7日間開かないとデータが消えることがあります。') : ''),
+    [[tr('書き出し'), () => $('exportBtn').click()], [tr('あとで'), () => { store(SNOOZE_KEY, Date.now() + 3 * DAY); hideNotice('backup'); }]]);
 }
 
 // ---------- other tabs ----------
 // Every write is broadcast (db.js). Here: keep lists in sync, and protect the open note.
 
 function showConflict() {
-  showNotice('conflict', '別のタブでこのノートが変更されています。このまま保存すると向こうの変更が消えるので、保存を止めました。',
-    [['最新を読み込む', reloadCurrentFromDb], ['こちらで上書き', () => { hideNotice('conflict'); saveNow({ force: true }); }]]);
+  showNotice('conflict', tr('別のタブでこのノートが変更されています。このまま保存すると向こうの変更が消えるので、保存を止めました。'),
+    [[tr('最新を読み込む'), reloadCurrentFromDb], [tr('こちらで上書き'), () => { hideNotice('conflict'); saveNow({ force: true }); }]]);
 }
 
 async function reloadCurrentFromDb() {
@@ -1796,7 +1798,7 @@ async function resync() {
   await loadNotes();
   notebooks = await getAllNotebooks();
   if (currentId && !findNote(currentId)) {
-    showNotice('conflict', 'このノートは別のタブで削除(ゴミ箱へ移動)されました。', [['一覧へ', () => { hideNotice('conflict'); currentId = null; go('list'); }]]);
+    showNotice('conflict', tr('このノートは別のタブで削除(ゴミ箱へ移動)されました。'), [[tr('一覧へ'), () => { hideNotice('conflict'); currentId = null; go('list'); }]]);
   }
   renderAll();
 }
@@ -1808,12 +1810,12 @@ channel?.addEventListener('message', ({ data: m }) => {
     resyncTimer = setTimeout(resync, 300);
     if (m.store === 'notes' && m.id === currentId) {
       if (saveTimer) return; // our pending save will hit the conflict check
-      showNotice('conflict', '別のタブでこのノートが変更されました。', [['最新を読み込む', reloadCurrentFromDb]]);
+      showNotice('conflict', tr('別のタブでこのノートが変更されました。'), [[tr('最新を読み込む'), reloadCurrentFromDb]]);
     }
   }
   if ((m.type === 'who' || m.type === 'here') && m.id === currentId) {
     if (m.type === 'who') channel.postMessage({ type: 'here', id: currentId, from: TAB_ID });
-    showNotice('tab', 'このノートは別のタブでも開いています。両方で書くと、片方の変更が消えることがあります(上書きしそうなときは保存を止めて知らせます)。');
+    showNotice('tab', tr('このノートは別のタブでも開いています。両方で書くと、片方の変更が消えることがあります(上書きしそうなときは保存を止めて知らせます)。'));
   }
 });
 
@@ -1825,17 +1827,17 @@ const currentTheme = () => document.documentElement.dataset.theme || systemTheme
 
 // value, label, swatch (base color, accent color)
 const THEMES = [
-  ['dark', 'グラファイト', ['#141518', '#8fb4ff']],
-  ['light', 'ペーパー', ['#f6f6f4', '#3f4652']],
-  ['red', 'ボルドー', ['#3a1d24', '#ff8fa8']],
-  ['green', 'フォレスト', ['#1c3328', '#6ee7b7']],
-  ['blue', 'インディゴ', ['#1b2840', '#7dd3fc']],
+  ['dark', tr('グラファイト'), ['#141518', '#8fb4ff']],
+  ['light', tr('ペーパー'), ['#f6f6f4', '#3f4652']],
+  ['red', tr('ボルドー'), ['#3a1d24', '#ff8fa8']],
+  ['green', tr('フォレスト'), ['#1c3328', '#6ee7b7']],
+  ['blue', tr('インディゴ'), ['#1b2840', '#7dd3fc']],
 ];
 
 function applyTheme(theme) {
   if (theme) document.documentElement.dataset.theme = theme;
   const label = THEMES.find(([v]) => v === currentTheme())?.[1] || '';
-  $('themeBtn').textContent = `テーマ: ${label}`;
+  $('themeBtn').textContent = tr('テーマ: {label}', { label });
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
   document.querySelector('meta[name="theme-color"]').content = bg;
 }
@@ -1851,6 +1853,14 @@ $('themeBtn').onclick = e => {
     return item;
   })));
 };
+// Language: the button names the other language; switching reloads into it.
+$('langBtn').textContent = LANG === 'ja' ? 'English' : '日本語';
+$('langBtn').onclick = async () => {
+  if (saveTimer) await saveNow();
+  setLang(LANG === 'ja' ? 'en' : 'ja');
+  location.reload();
+};
+
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => applyTheme());
 applyTheme();
 
@@ -1873,5 +1883,5 @@ registerSW({ immediate: true });
   await route();
   if (!SOLO) { checkStorage(); checkBackupReminder(); } // the main window already says these
   const leftover = notes.filter(n => n.html?.includes(PLACEHOLDER)).length;
-  if (leftover) showToast(`${leftover}件のノートにEvernoteのタスクが未変換です。その.enexを「読み込み」し直すと直ります`, false);
+  if (leftover) showToast(tr('{n}件のノートにEvernoteのタスクが未変換です。その.enexを「読み込み」し直すと直ります', { n: leftover }), false);
 })();

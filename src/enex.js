@@ -1,5 +1,6 @@
 // Evernote .enex import. One file = one notebook (named after the file, as Evernote exports it).
 // ENML is XHTML with a few Evernote-only tags; we rewrite it into HTML Tiptap understands.
+import { t as tr } from './i18n.js';
 import SparkMD5 from 'spark-md5';
 import { isValidYoutubeUrl } from '@tiptap/extension-youtube';
 import { uid, getAllNotes, putNote, getAllNotebooks, putNotebook, deleteAttachment } from './db.js';
@@ -51,7 +52,7 @@ function convertBody(root, media) {
   const doc = root.ownerDocument;
 
   for (const el of [...root.querySelectorAll('en-crypt')]) {
-    el.replaceWith(doc.createTextNode('[暗号化された内容]'));
+    el.replaceWith(doc.createTextNode(tr('[暗号化された内容]')));
   }
 
   for (const el of [...root.querySelectorAll('en-media')]) {
@@ -64,7 +65,7 @@ function convertBody(root, media) {
     } else {
       const a = doc.createElement('a');
       a.setAttribute('href', `att:${m.id}`);
-      a.textContent = `添付: ${m.name || m.mime}`;
+      a.textContent = tr('添付: {name}', { name: m.name || m.mime });
       const p = doc.createElement('p');
       p.append(a);
       el.replaceWith(p);
@@ -277,7 +278,7 @@ async function* streamNotes(file, onBytes) {
       checked = true;
       if (!value.slice(0, 4096).includes('<en-export')) {
         reader.cancel();
-        throw new Error(`${file.name} はEvernoteの書き出しファイルとして読めませんでした`);
+        throw new Error(tr('{name} はEvernoteの書き出しファイルとして読めませんでした', { name: file.name }));
       }
     }
     let rest = carry + value;
@@ -313,7 +314,7 @@ function parseNote(text) {
   };
   const el = parse(text) || parse(text.replace(BARE_AMP, '&amp;'));
   if (el) return { el };
-  const title = text.slice(0, 2000).match(/<title>([\s\S]*?)<\/title>/)?.[1] || '(タイトル不明)';
+  const title = text.slice(0, 2000).match(/<title>([\s\S]*?)<\/title>/)?.[1] || tr('(タイトル不明)');
   return { failed: title };
 }
 

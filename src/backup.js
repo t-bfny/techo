@@ -4,6 +4,7 @@ import {
 } from './db.js';
 import { sanitizeHtml } from './sanitize.js';
 import { fillToc } from './toc.js';
+import { t as tr, notebookKey } from './i18n.js';
 
 const toDataUrl = blob => new Promise(r => {
   const fr = new FileReader();
@@ -21,7 +22,7 @@ function download(blob, filename) {
 }
 
 const today = () => new Intl.DateTimeFormat('en-CA').format(new Date()); // local date, not UTC
-export const safeName = s => (s || '無題').replace(/[\\/:*?"<>|\r\n]+/g, '_').slice(0, 80);
+export const safeName = s => (s || tr('無題')).replace(/[\\/:*?"<>|\r\n]+/g, '_').slice(0, 80);
 const attIds = notes => [...new Set(notes.flatMap(n => [...(n.html || '').matchAll(/att:([a-z0-9]+)/g)].map(m => m[1])))];
 
 async function attachmentsFor(ids) {
@@ -50,7 +51,7 @@ async function openSink(filename) {
     try {
       handle = await window.showSaveFilePicker({
         suggestedName: filename,
-        types: [{ description: 'techoのバックアップ', accept: { 'application/json': ['.json'] } }],
+        types: [{ description: tr('techoのバックアップ'), accept: { 'application/json': ['.json'] } }],
       });
     } catch (err) {
       if (err.name === 'AbortError') return null; // closed the dialog
@@ -130,7 +131,7 @@ export async function exportNotesHtml(notes, titleOf, name) {
     fillToc(art, { links: true, prefix: `n${i + 1}` });
     return art.outerHTML;
   }).join('<hr>');
-  const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(name)}</title>
+  const html = `<!doctype html><html lang="${document.documentElement.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(name)}</title>
 <style>body{font-family:-apple-system,'Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;max-width:820px;margin:0 auto;padding:24px;line-height:1.75}
 img{max-width:100%;height:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 10px}
 pre{background:#f3f3f3;padding:12px;overflow-x:auto}ul[data-type=taskList]{list-style:none;padding-left:4px}
@@ -167,7 +168,7 @@ async function eachLine(file, onLine) {
 export async function importFile(file, onProgress = () => {}) {
   const here = await getAllNotebooks();
   const existing = new Set(here.map(nb => nb.id));
-  const byName = new Map(here.map(nb => [nb.name, nb.id]));
+  const byName = new Map(here.map(nb => [notebookKey(nb.name), nb.id]));
   // A backup from another device has its own ids: its "マイノート" (or any notebook whose
   // name is already here) joins the one on this device instead of becoming a second one.
   // Notebooks come first in the file, so the mapping is ready before the notes.
@@ -176,10 +177,10 @@ export async function importFile(file, onProgress = () => {}) {
   const put = async (kind, d) => {
     if (kind === 'notebook') {
       if (existing.has(d.id)) return;
-      if (byName.has(d.name)) { sameAs.set(d.id, byName.get(d.name)); return; }
+      if (byName.has(notebookKey(d.name))) { sameAs.set(d.id, byName.get(notebookKey(d.name))); return; }
       await putNotebook(d);
       existing.add(d.id);
-      byName.set(d.name, d.id);
+      byName.set(notebookKey(d.name), d.id);
     } else if (kind === 'attachment') {
       const blob = await (await fetch(d.data)).blob();
       await putAttachment({ id: d.id, blob, type: d.type, name: d.name, createdAt: d.createdAt });
@@ -212,7 +213,7 @@ export async function importFile(file, onProgress = () => {}) {
   if (!lineMode) {
     // Backups from v0.14.1 and earlier: one JSON document.
     const data = JSON.parse(await file.text());
-    if (data.app !== 'techo') throw new Error('techoのバックアップではありません');
+    if (data.app !== 'techo') throw new Error(tr('techoのバックアップではありません'));
     for (const nb of data.notebooks || []) await put('notebook', nb);
     for (const a of data.attachments || []) await put('attachment', a);
     for (const d of data.notes || []) await put('note', d);

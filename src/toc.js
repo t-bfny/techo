@@ -2,19 +2,18 @@
 // Only an empty <div data-toc> is saved; the list is always rebuilt from the current
 // headings, so it never goes stale.
 import { Node } from '@tiptap/core';
-
-const EMPTY = '見出しがありません。見出し1〜3を付けると、ここに並びます。';
+import { t as tr } from './i18n.js';
 
 function render(box, items, onPick) {
   box.replaceChildren();
   const head = document.createElement('div');
   head.className = 'toc-head';
-  head.textContent = '目次';
+  head.textContent = tr('目次');
   box.append(head);
   if (!items.length) {
     const p = document.createElement('div');
     p.className = 'toc-empty';
-    p.textContent = EMPTY;
+    p.textContent = tr('見出しがありません。見出し1〜3を付けると、ここに並びます。');
     box.append(p);
     return;
   }
@@ -23,7 +22,7 @@ function render(box, items, onPick) {
     const el = onPick ? document.createElement('button') : document.createElement('a');
     el.className = 'toc-item';
     el.dataset.depth = item.level - top;
-    el.textContent = item.text || '(無題の見出し)';
+    el.textContent = item.text || tr('(無題の見出し)');
     if (onPick) {
       el.type = 'button';
       el.onclick = e => { e.preventDefault(); e.stopPropagation(); onPick(i); };

@@ -79,6 +79,7 @@
       <header class="bar">
         <button class="drawer-only" data-drawer>メニュー</button>
         <span class="grow"></span>
+        <button id="langBtn" title="言語 / Language"></button>
         <button id="themeBtn" title="ライト/ダークを切り替え"></button>
         <button class="primary" data-new>新規作成</button>
       </header>
@@ -151,7 +152,7 @@
         <span class="grow"></span>
         <span class="seg">
           <button data-filemode="all" class="on">すべて</button>
-          <button data-filemode="image">画像</button>
+          <button data-filemode="image" data-i18n="画像#filter">画像</button>
           <button data-filemode="other">PDF・その他</button>
         </span>
       </header>
@@ -190,12 +191,12 @@
       <div id="editorWrap" hidden>
         <header class="bar crumbs">
           <button id="backBtn" class="narrow-only">一覧</button>
-          <span id="templateMark" class="template-mark" hidden>テンプレート</span>
+          <span id="templateMark" class="template-mark" data-i18n="テンプレート#mark" hidden>テンプレート</span>
           <select id="nbSelect" title="ノートブックを移動"></select>
           <span class="sep">›</span>
           <span id="crumbTitle" class="ellipsis"></span>
           <span class="grow"></span>
-          <button id="pinBtn" class="wide-only">ショートカット</button>
+          <button id="pinBtn" class="wide-only" data-i18n="ショートカット#pin">ショートカット</button>
           <button id="stageBtn">プレビュー</button>
           <button id="deleteBtn" class="danger wide-only">削除</button>
           <button id="moreBtn" class="narrow-only" data-pop="more">その他</button>

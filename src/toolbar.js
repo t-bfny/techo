@@ -1,5 +1,6 @@
 // Formatting toolbar + the popovers it opens (insert menu, due date, text color, highlight).
 import { addDays as offsetDay, fmtDue } from './tasks.js';
+import { t as tr } from './i18n.js';
 
 const $ = id => document.getElementById(id);
 
@@ -75,7 +76,7 @@ function swatches(pop, colors, current, apply, kind) {
   for (const [name, value] of colors) {
     const b = document.createElement('button');
     b.className = `swatch ${kind}`;
-    b.title = name;
+    b.title = tr(name);
     if (value) b.style.setProperty('--c', value); else b.classList.add('none');
     if ((current || null) === value) b.classList.add('on');
     b.onclick = () => { closePopover(); apply(value); };
@@ -102,15 +103,15 @@ export function setupToolbar(editor, insert) {
       showPopover(b, p => {
         p.classList.remove('swatches');
         p.append(
-          menuItem('画像', insert.image),
-          menuItem('ファイル(PDFなど)', insert.file),
-          menuItem('表', () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()),
-          menuItem('YouTube動画', insert.youtube),
-          menuItem('リンク', insert.link),
-          menuItem('チェックリスト', () => editor.chain().focus().toggleTaskList().run()),
-          menuItem('引用', () => editor.chain().focus().toggleBlockquote().run()),
-          menuItem('区切り線', () => editor.chain().focus().setHorizontalRule().run()),
-          menuItem('目次', () => editor.chain().focus().insertTableOfContents().run()),
+          menuItem(tr('画像'), insert.image),
+          menuItem(tr('ファイル(PDFなど)'), insert.file),
+          menuItem(tr('表'), () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()),
+          menuItem(tr('YouTube動画'), insert.youtube),
+          menuItem(tr('リンク'), insert.link),
+          menuItem(tr('チェックリスト'), () => editor.chain().focus().toggleTaskList().run()),
+          menuItem(tr('引用'), () => editor.chain().focus().toggleBlockquote().run()),
+          menuItem(tr('区切り線'), () => editor.chain().focus().setHorizontalRule().run()),
+          menuItem(tr('目次'), () => editor.chain().focus().insertTableOfContents().run()),
         );
       });
     }
@@ -125,10 +126,10 @@ export function setupToolbar(editor, insert) {
         input.onchange = () => { if (input.value) { closePopover(); setDue(input.value); } };
         p.append(
           input,
-          menuItem('今日', () => setDue(offsetDay(0))),
-          menuItem('明日', () => setDue(offsetDay(1))),
-          menuItem('来週', () => setDue(offsetDay(7))),
-          menuItem('期限を外す', () => setDue(null)),
+          menuItem(tr('今日'), () => setDue(offsetDay(0))),
+          menuItem(tr('明日'), () => setDue(offsetDay(1))),
+          menuItem(tr('来週'), () => setDue(offsetDay(7))),
+          menuItem(tr('期限を外す'), () => setDue(null)),
         );
       });
     }
@@ -169,7 +170,7 @@ export function setupToolbar(editor, insert) {
     const inTask = editor.isActive('taskItem');
     $('dueBtn').hidden = !inTask;
     const due = inTask && editor.getAttributes('taskItem').due;
-    $('dueBtn').textContent = due ? `期限 ${fmtDue(due)}` : '期限';
+    $('dueBtn').textContent = due ? tr('期限 {due}', { due: fmtDue(due) }) : tr('期限');
     $('dueBtn').classList.toggle('on', !!due);
   };
   editor.on('transaction', sync);

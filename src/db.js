@@ -3,6 +3,8 @@
 // notebooks: {id, name, createdAt}
 // attachments: {id, blob, type, createdAt}  (html references them as att:ID)
 
+import { t as tr } from './i18n.js';
+
 const DB_NAME = 'techo';
 const DB_VERSION = 2;
 let dbPromise;
@@ -59,7 +61,7 @@ function tx(store, mode, fn, id) {
     };
     // A full disk aborts the transaction (QuotaExceededError) rather than erroring it;
     // without onabort the promise would never settle and saving would hang forever.
-    const fail = () => failWith(t.error || new Error('保存できませんでした'));
+    const fail = () => failWith(t.error || new Error(tr('保存できませんでした')));
     t.onerror = fail;
     t.onabort = fail;
   }));
