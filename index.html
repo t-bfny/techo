@@ -72,6 +72,7 @@
         <button id="bulkClear" class="mini">解除</button>
       </div>
       <ul id="noteList"></ul>
+      <button id="searchAll" class="search-all" hidden></button>
     </aside>
 
     <section id="homeView" class="page">
@@ -87,6 +88,11 @@
           <h1 class="wordmark">techo<span class="wordmark-dot">.</span></h1>
           <p class="banner-sub"><span id="homeDate"></span><span id="homeStats"></span></p>
         </div>
+        <div class="home-search">
+          <input id="homeSearch" type="search" placeholder="すべてのノートを検索 (Ctrl+K)" autocomplete="off" enterkeyhint="search">
+        </div>
+        <div id="homeResults"></div>
+        <div class="home-main">
         <h2 class="page-h"><button class="link-plain" data-filter="all">最近のノート</button></h2>
         <div id="homeRecent" class="cards"></div>
         <div id="homeTasksWrap">
@@ -102,6 +108,7 @@
             <h2 class="page-h"><button class="link-plain" data-go="notebooks">ノートブック</button></h2>
             <div id="homeNotebooks" class="rows"></div>
           </div>
+        </div>
         </div>
       </div>
     </section>

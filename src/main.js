@@ -469,10 +469,72 @@ function sortNotes(list) {
   return list.sort((a, b) => sign * cmp(a, b));
 }
 
+// ---------- search ----------
+// Case, full/half-width letters and digits, and katakana/hiragana all count as the same
+// ("セッション" finds "せっしょん", "ＡＢＣ" finds "abc"). Character for character, so a hit's
+// position in the folded text is its position in the original (used for snippets).
+const fold = s => (s || '').toLowerCase()
+  .replace(/[\uff01-\uff5e]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+  .replace(/\u3000/g, ' ')
+  .replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+
+const searchTerms = q => fold(q).split(/\s+/).filter(Boolean);
+
+// Folding 1000 note bodies on every keystroke is wasted work; redo one only when it changes.
+const foldedBody = new WeakMap();
+function bodyOf(note) {
+  let c = foldedBody.get(note);
+  if (!c || c.text !== note.text) foldedBody.set(note, c = { text: note.text, folded: fold(note.text) });
+  return c.folded;
+}
+
+const titleOf = note => fold(`${numberLabel(note)} ${note.title}`);
+
 function matches(note, terms) {
   if (!terms.length) return true;
-  const hay = `${numberLabel(note)} ${note.title}\n${note.text}`.toLowerCase();
-  return terms.every(t => hay.includes(t));
+  const title = titleOf(note), body = bodyOf(note);
+  return terms.every(t => title.includes(t) || body.includes(t));
+}
+
+// Title hits first, then the most recently updated.
+function searchNotes(list, terms) {
+  return list.filter(n => matches(n, terms))
+    .map(n => [n, terms.filter(t => titleOf(n).includes(t)).length])
+    .sort((a, b) => b[1] - a[1] || b[0].updatedAt - a[0].updatedAt)
+    .map(([n]) => n);
+}
+
+// Appends text to el with every term wrapped in <mark>.
+function appendMarked(el, text, terms) {
+  const folded = fold(text);
+  let i = 0;
+  while (i < text.length) {
+    let at = -1, len = 0;
+    for (const t of terms) {
+      const j = folded.indexOf(t, i);
+      if (j >= 0 && (at < 0 || j < at || (j === at && t.length > len))) { at = j; len = t.length; }
+    }
+    if (at < 0) { el.append(text.slice(i)); break; }
+    if (at > i) el.append(text.slice(i, at));
+    el.append(Object.assign(document.createElement('mark'), { textContent: text.slice(at, at + len) }));
+    i = at + len;
+  }
+}
+
+// The part of the body around the first hit, with hits marked; the opening lines if the
+// hits are only in the title.
+function snippetEl(note, terms, width = 90) {
+  const el = document.createElement('span');
+  const text = (note.text || '').replace(/\s+/g, ' ').trim();
+  const folded = fold(text);
+  const hits = terms.map(t => folded.indexOf(t)).filter(i => i >= 0);
+  if (!hits.length) { el.textContent = snippetOf(note).slice(0, width); return el; }
+  const start = Math.max(0, Math.min(...hits) - Math.round(width / 3));
+  const part = text.slice(start, start + width);
+  if (start > 0) el.append('…');
+  appendMarked(el, part, terms);
+  if (start + width < text.length) el.append('…');
+  return el;
 }
 
 function inFilter(n) {
@@ -547,6 +609,43 @@ function renderSidebar() {
 function snippetOf(n) {
   const lines = (n.text || '').split('\n').map(s => s.trim()).filter(Boolean);
   return (n.title ? lines : lines.slice(1)).join(' ');
+}
+
+const HOME_RESULTS = 30;
+
+function renderHomeSearch() {
+  const q = $('homeSearch').value;
+  const terms = searchTerms(q);
+  document.body.classList.toggle('home-searching', terms.length > 0);
+  if (!terms.length) { $('homeResults').replaceChildren(); return; }
+  const found = searchNotes(notes, terms);
+  const rows = found.slice(0, HOME_RESULTS).map(n => {
+    const b = document.createElement('button');
+    b.className = 'hit';
+    b.dataset.note = n.id;
+    b.innerHTML = '<span class="hit-t"></span><span class="hit-m"></span><span class="hit-s"></span>';
+    appendMarked(b.children[0], displayTitle(n), terms);
+    b.children[1].textContent = `${notebookName(n.notebookId)} · ${fmtDate(n.updatedAt)}`;
+    b.children[2].append(snippetEl(n, terms));
+    return b;
+  });
+  const head = document.createElement('div');
+  head.className = 'hit-head';
+  head.textContent = found.length ? `${found.length}件` : '見つかりませんでした';
+  if (found.length > HOME_RESULTS) {
+    const more = document.createElement('button');
+    more.className = 'link-plain';
+    more.textContent = `一覧で${found.length}件すべてを見る`;
+    more.onclick = () => showAllResults(q);
+    head.append(more);
+  }
+  $('homeResults').replaceChildren(head, ...rows);
+}
+
+function showAllResults(q) {
+  $('search').value = q;
+  setFilter({ type: 'all' });
+  go('list');
 }
 
 function renderHome() {
@@ -732,9 +831,13 @@ function renderBulkBar() {
 }
 
 function renderList() {
-  const terms = $('search').value.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = searchTerms($('search').value);
   const scoped = notes.filter(inFilter);
   const sorted = sortNotes(scoped.filter(n => matches(n, terms)));
+  // Searching inside a notebook or shortcuts: say how many hits the rest of the notes have.
+  const elsewhere = terms.length && filter.type !== 'all' ? notes.filter(n => !inFilter(n) && matches(n, terms)).length : 0;
+  $('searchAll').hidden = !elsewhere;
+  $('searchAll').textContent = `ほかのノートにも${elsewhere}件 — すべてのノートで検索`;
   // Inside a notebook, pinned notes stay on top whatever the sort; the rest follow in order.
   const shown = filter.type === 'notebook' ? [...sorted.filter(n => n.pinTop), ...sorted.filter(n => !n.pinTop)] : sorted;
   $('sortSelect').value = sort.key;
@@ -761,7 +864,13 @@ function renderList() {
     li.innerHTML = `<div class="row"><span class="t"></span>${n.pinTop ? PIN_ICON : ''}<span class="d"></span></div><div class="s"></div><div class="nb"></div>`;
     li.querySelector('.t').textContent = displayTitle(n);
     li.querySelector('.d').textContent = fmtDate(n.updatedAt);
-    li.querySelector('.s').textContent = snippet;
+    if (terms.length) {
+      li.querySelector('.t').replaceChildren();
+      appendMarked(li.querySelector('.t'), displayTitle(n), terms);
+      li.querySelector('.s').append(snippetEl(n, terms, 80));
+    } else {
+      li.querySelector('.s').textContent = snippet;
+    }
     li.querySelector('.nb').textContent = showNotebook ? notebookName(n.notebookId) : '';
     return li;
   }));
@@ -1411,6 +1520,28 @@ $('tabList').addEventListener('auxclick', e => {
 });
 
 $('search').oninput = renderList;
+$('searchAll').onclick = () => showAllResults($('search').value);
+$('homeSearch').oninput = renderHomeSearch;
+$('homeSearch').onkeydown = e => {
+  if (e.key === 'Enter') { e.preventDefault(); $('homeResults').querySelector('.hit')?.click(); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); $('homeResults').querySelector('.hit')?.focus(); }
+  if (e.key === 'Escape' && $('homeSearch').value) { e.stopPropagation(); $('homeSearch').value = ''; renderHomeSearch(); }
+};
+// Up/down moves between results; up from the first goes back to the box.
+$('homeResults').addEventListener('keydown', e => {
+  const hit = e.target.closest('.hit');
+  if (!hit || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+  e.preventDefault();
+  const next = e.key === 'ArrowDown' ? hit.nextElementSibling : hit.previousElementSibling;
+  (next?.classList.contains('hit') ? next : e.key === 'ArrowUp' ? $('homeSearch') : hit).focus();
+});
+// Ctrl+K: search all notes from anywhere.
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k' || SOLO) return;
+  e.preventDefault();
+  closeDrawer();
+  go('home').then(() => { $('homeSearch').focus(); $('homeSearch').select(); });
+});
 $('titleInput').oninput = () => {
   scheduleSave();
   $('crumbTitle').textContent = $('titleInput').value || '無題';
