@@ -20,7 +20,7 @@ import { exportAll, importFile, exportNotesJson, exportNotesHtml } from './backu
 import { importEnex, PLACEHOLDER, htmlToText } from './enex.js';
 import { JaAutolink } from './autolink.js';
 import { sanitizeHtml } from './sanitize.js';
-import { t as tr, LANG, LOCALE, setLang, translatePage, notebookKey } from './i18n.js';
+import { t as tr, LANG, LOCALE, setLang, translatePage, notebookKey, welcomeNote } from './i18n.js';
 import { TableOfContents, fillToc } from './toc.js';
 import { Indent, KeepTab } from './indent.js';
 import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
@@ -153,6 +153,21 @@ const defaultNotebook = () => [...notebooks].sort(byCreated)[0];
 const notebookName = id => notebooks.find(nb => nb.id === id)?.name || '';
 
 // Every note must belong to a notebook; older data and imports may not.
+// The very first start on this browser: one note that says what techo is and where things
+// are. Never again after that (deleting it is fine), and never next to existing notes.
+const WELCOME_KEY = 'techo.welcomed';
+async function welcome() {
+  if (load(WELCOME_KEY, false)) return;
+  store(WELCOME_KEY, true);
+  if (notes.length || trashed.length || templates.length) return;
+  const { title, html } = welcomeNote();
+  const now = Date.now();
+  const note = { id: uid(), title, html, text: htmlToText(html), notebookId: defaultNotebook().id, pinned: false, createdAt: now, updatedAt: now };
+  await putNote(note);
+  notes.push(note);
+  store(WELCOME_KEY, note.id); // remembered so the backup reminder doesn't count it
+}
+
 async function ensureNotebooks() {
   if (!notebooks.length) {
     const nb = { id: uid(), name: tr('マイノート'), createdAt: Date.now() };
@@ -1004,7 +1019,7 @@ function go(hash) {
 async function doRoute() {
   const hash = location.hash;
   const [, id, mode] = hash.match(/^#n\/([a-z0-9]+)(?:\/(stage))?$/) || [];
-  view = id ? 'note' : ({ '#notebooks': 'notebooks', '#list': 'list', '#tasks': 'tasks', '#files': 'files', '#trash': 'trash', '#templates': 'templates' })[hash] || 'home';
+  view = id ? 'note' : ({ '#notebooks': 'notebooks', '#list': 'list', '#tasks': 'tasks', '#files': 'files', '#trash': 'trash', '#templates': 'templates', '#about': 'about' })[hash] || 'home';
   document.body.dataset.view = view;
   if (id !== currentId) {
     await leaveCurrent();
@@ -1768,7 +1783,8 @@ const BACKUP_KEY = 'techo.lastBackup';
 const SNOOZE_KEY = 'techo.backupSnooze';
 
 function checkBackupReminder() {
-  if (!notes.length || Date.now() < Number(load(SNOOZE_KEY, 0))) return;
+  const welcomeId = load(WELCOME_KEY, null);
+  if (!notes.some(n => n.id !== welcomeId) || Date.now() < Number(load(SNOOZE_KEY, 0))) return;
   const last = Number(load(BACKUP_KEY, 0));
   const days = last ? Math.floor((Date.now() - last) / DAY) : null;
   if (days !== null && days < 7) return;
@@ -1888,7 +1904,7 @@ window.addEventListener('techo:db-blocked', () => showNotice('tab',
 
 (async () => {
   requestPersist();
-  $('appVersion').textContent = `v${__APP_VERSION__}`;
+  $('appVersion').textContent = $('aboutVersion').textContent = `v${__APP_VERSION__}`;
   try {
     await loadNotes();
   } catch (err) {
@@ -1898,6 +1914,7 @@ window.addEventListener('techo:db-blocked', () => showNotice('tab',
   await purge(trashed.filter(n => n.deletedAt < Date.now() - TRASH_DAYS * DAY));
   notebooks = await getAllNotebooks();
   await ensureNotebooks();
+  await welcome();
   const ids = new Set(notes.map(n => n.id));
   tabs = SOLO ? [] : load(TABS_KEY, []).filter(id => ids.has(id));
   sort = { ...sort, ...load(SORT_KEY, {}) };

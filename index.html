@@ -38,7 +38,7 @@
         <button id="importBtn" title="techoのバックアップ(.json)とEvernoteの書き出し(.enex)。複数まとめて選べます">読み込み</button>
         <input id="importInput" type="file" accept=".json,.enex,application/json" multiple hidden>
         <span class="grow"></span>
-        <span id="appVersion" class="dim"></span>
+        <button id="appVersion" class="link-plain dim" data-go="about" title="このアプリについて"></button>
       </footer>
     </nav>
     <div id="scrim" hidden></div>
@@ -110,6 +110,7 @@
             <div id="homeNotebooks" class="rows"></div>
           </div>
         </div>
+        <p class="home-foot"><button class="link-plain" data-go="about">このアプリについて</button></p>
         </div>
       </div>
     </section>
@@ -169,6 +170,92 @@
         <p class="dim trash-note">「新規作成」から選べます。タイトルの〈日付〉は作った日の日付になり、チェックリストは未チェックで始まります。</p>
         <div id="templateRows" class="task-page"></div>
       </div>
+    </section>
+
+    <!-- Long text in both languages; i18n.js hides the other one (html[lang]). -->
+    <section id="aboutView" class="page">
+      <header class="bar">
+        <button class="drawer-only" data-drawer>メニュー</button>
+        <strong>このアプリについて</strong>
+        <span id="aboutVersion" class="dim"></span>
+      </header>
+      <div class="page-body"><div class="about">
+        <div lang="ja">
+          <p class="about-lead">techo は、ブラウザで使うメモ帳です。アカウントはいりません。インターネットにつながっていなくても使えて、無料です。</p>
+
+          <h2>メモはどこに保存されるか</h2>
+          <ul>
+            <li>メモ・画像・添付ファイルは、<b>今使っているこのブラウザの中にだけ</b>保存されます。techo の開発者を含め、ほかの誰にも送られません。techo にはデータを受け取るサーバーがありません。</li>
+            <li>アクセス解析・広告・追跡用の Cookie は使っていません。</li>
+            <li>例外として、YouTube の動画を埋め込むと、その再生画面を YouTube(youtube-nocookie.com)から読み込みます。ネット上の画像を URL で貼ったときは、その画像をそのサイトから読み込みます。</li>
+            <li>端末どうしの同期はまだありません。別の端末に移すときは「書き出し」したファイルを、移したい先で「読み込み」してください。</li>
+          </ul>
+
+          <h2>バックアップ</h2>
+          <ul>
+            <li>サイドバーの下の「書き出し」で、すべてのメモを 1 つのファイルに保存できます。PC の Chrome / Edge では保存先を選べます。</li>
+            <li>ブラウザのデータを消したり、ブラウザを入れ直したりすると、メモも消えます。ときどき書き出しておいてください(7 日たつと techo からお知らせします)。</li>
+            <li><b>iPhone / iPad</b>:Safari の共有ボタン →「ホーム画面に追加」から使ってください。追加しないまま 7 日間開かないと、iOS がデータを消すことがあります。</li>
+          </ul>
+
+          <h2>Evernote から移す</h2>
+          <p>Evernote でノートブックごとに .enex ファイルを書き出し、techo の「読み込み」で選びます(まとめて選べます)。ファイル名がノートブック名になります。</p>
+
+          <h2>キーボード</h2>
+          <table class="about-keys">
+            <tr><td>Ctrl+K</td><td>すべてのノートを検索</td></tr>
+            <tr><td>Ctrl+P</td><td>開いているノート(選んだノート)を印刷</td></tr>
+            <tr><td>Ctrl+Z</td><td>削除・移動などを取り消す(本文の外で)</td></tr>
+            <tr><td>Tab / Shift+Tab</td><td>インデント</td></tr>
+            <tr><td>Shift / Ctrl+クリック</td><td>一覧で複数選択</td></tr>
+            <tr><td>中クリック</td><td>新しいタブで開く</td></tr>
+          </table>
+
+          <h2>不具合・要望</h2>
+          <p><a href="https://github.com/t-bfny/techo/issues" target="_blank" rel="noopener">GitHub の Issues</a> に書いてください。</p>
+
+          <h2>ソースコードとライセンス</h2>
+          <p>techo はオープンソースです(<a href="https://github.com/t-bfny/techo" target="_blank" rel="noopener">GitHub</a>、MIT ライセンス)。使っているライブラリとフォントのライセンスは<a href="/third-party-licenses.txt" target="_blank" rel="noopener">こちら</a>。</p>
+        </div>
+
+        <div lang="en">
+          <p class="about-lead">techo is a notebook that runs in your browser. No account, works offline, free.</p>
+
+          <h2>Where your notes are stored</h2>
+          <ul>
+            <li>Notes, images and attachments are stored <b>only in this browser on this device</b>. They are not sent to anyone, including techo's developer — techo has no server that receives data.</li>
+            <li>No analytics, no ads, no tracking cookies.</li>
+            <li>Exceptions: an embedded YouTube video loads its player from YouTube (youtube-nocookie.com), and an image pasted as a web address loads from that site.</li>
+            <li>There is no sync between devices yet. To move your notes, export them here and import the file on the other device.</li>
+          </ul>
+
+          <h2>Backups</h2>
+          <ul>
+            <li>"Export" at the bottom of the sidebar saves all your notes into one file. In Chrome / Edge on a computer you can choose where it goes.</li>
+            <li>Clearing your browser data or reinstalling the browser deletes your notes too. Export now and then — techo reminds you after 7 days.</li>
+            <li><b>iPhone / iPad</b>: in Safari, tap Share → "Add to Home Screen" and use techo from there. If it isn't added and goes unopened for 7 days, iOS may erase its data.</li>
+          </ul>
+
+          <h2>Moving from Evernote</h2>
+          <p>In Evernote, export each notebook as an .enex file, then pick them with "Import" in techo (several at once is fine). Each file name becomes a notebook name.</p>
+
+          <h2>Keyboard</h2>
+          <table class="about-keys">
+            <tr><td>Ctrl+K</td><td>Search all notes</td></tr>
+            <tr><td>Ctrl+P</td><td>Print the open (or selected) notes</td></tr>
+            <tr><td>Ctrl+Z</td><td>Undo a delete, move, etc. (outside the text)</td></tr>
+            <tr><td>Tab / Shift+Tab</td><td>Indent</td></tr>
+            <tr><td>Shift / Ctrl+click</td><td>Select several notes in the list</td></tr>
+            <tr><td>Middle-click</td><td>Open in a new tab</td></tr>
+          </table>
+
+          <h2>Bugs and requests</h2>
+          <p>Please open an issue on <a href="https://github.com/t-bfny/techo/issues" target="_blank" rel="noopener">GitHub</a>.</p>
+
+          <h2>Source code and license</h2>
+          <p>techo is open source (<a href="https://github.com/t-bfny/techo" target="_blank" rel="noopener">GitHub</a>, MIT License). Licenses of the libraries and font it uses: <a href="/third-party-licenses.txt" target="_blank" rel="noopener">third-party licenses</a>.</p>
+        </div>
+      </div></div>
     </section>
 
     <section id="trashView" class="page">

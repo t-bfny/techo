@@ -23,7 +23,9 @@ test('due dates, the Tasks page, checking from it, and the home screen', async (
   await page.click('.side-item[data-go="tasks"]');
   const groups = page.locator('#taskGroups section h2');
   await expect(groups).toHaveText(['期限切れ 1', '今日 1', '明日 1', '期限なし 1']);
-  await page.locator('.task-row', { hasText: 'スタジオ予約' }).locator('input').check();
+  // click, not check(): a checked task leaves the open list at once, so there is no row
+  // left for check() to confirm; the groups below are the confirmation
+  await page.locator('.task-row', { hasText: 'スタジオ予約' }).locator('input').click();
   await expect(groups).toHaveText(['今日 1', '明日 1', '期限なし 1']);
   await page.click('[data-taskmode="done"]');
   await expect(page.locator('#taskGroups .task-t')).toHaveText(['スタジオ予約']);

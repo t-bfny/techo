@@ -1,18 +1,20 @@
 {
   "name": "techo",
-  "version": "0.17.1",
-  "description": "Evernote代替の自作メモPWA",
+  "version": "0.18.0",
+  "description": "A notebook that runs in your browser: offline, no account, notes stay on your device.",
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build",
+    "build": "node scripts/third-party-licenses.mjs && vite build",
     "preview": "vite preview --host",
-    "deploy": "vite build && wrangler deploy",
-    "test": "vite build && playwright test",
-    "test:quick": "vite build && playwright test --grep-invert \"bigger than\""
+    "deploy": "npm run build && wrangler deploy",
+    "test": "npm run build && playwright test",
+    "test:quick": "npm run build && playwright test --grep-invert \"bigger than\""
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Yekipo",
+  "license": "MIT",
+  "repository": "github:t-bfny/techo",
+  "homepage": "https://techo.t-bfny.workers.dev",
   "type": "module",
   "dependencies": {
     "@tiptap/core": "^3.31.3",

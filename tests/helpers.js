@@ -8,8 +8,10 @@ export { expect };
 export const fixture = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
 export const test = base.extend({
+  // A fresh browser normally gets a welcome note; most tests want a truly empty start.
+  welcome: [false, { option: true }],
   // What prompt() answers; tests set page.answer = '…' before triggering one.
-  page: async ({ page }, use) => {
+  page: async ({ page, welcome }, use) => {
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     page.dialogs = [];
@@ -17,6 +19,7 @@ export const test = base.extend({
     page.on('dialog', d => { page.dialogs.push(d.message()); d.accept(d.type() === 'prompt' ? page.answer : undefined); });
     // Headless Chrome has a save dialog API but nobody to answer it: use the download path.
     await page.addInitScript(() => { window.showSaveFilePicker = undefined; });
+    if (!welcome) await page.addInitScript(() => { if (!localStorage.getItem('techo.welcomed')) localStorage.setItem('techo.welcomed', 'true'); });
     await use(page);
     expect(errors, 'uncaught errors in the page').toEqual([]);
   },

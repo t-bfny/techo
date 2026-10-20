@@ -1033,3 +1033,21 @@ body.home-searching .home-main { display: none; }
   text-align: left;
   color: var(--accent);
 }
+
+/* ---------- about page ---------- */
+body[data-view="about"] #aboutView { display: flex; }
+body[data-view="about"] :is(#listPane, #editorPane) { display: none !important; }
+html[lang="en"] .about [lang="ja"], html:not([lang="en"]) .about [lang="en"] { display: none; }
+.about { max-width: 720px; line-height: 1.75; font-size: 15.5px; }
+.about-lead { font-size: 17px; margin: 18px 0 4px; }
+.about h2 { font-size: 16px; margin: 28px 0 8px; }
+.about ul { padding-left: 1.3em; margin: 0; }
+.about li + li { margin-top: 4px; }
+.about a { color: var(--accent); }
+.about-keys { border-collapse: collapse; }
+.about-keys td { padding: 4px 16px 4px 0; vertical-align: top; }
+.about-keys td:first-child { font-family: ui-monospace, Consolas, monospace; font-size: 14px; white-space: nowrap; color: var(--text-dim); }
+.home-foot { margin: 28px 0 0; font-size: 13.5px; text-align: center; }
+.home-foot .link-plain { color: var(--text-dim); }
+#appVersion { font-size: inherit; padding: 2px 4px; }
+#appVersion:hover { color: var(--text); }

@@ -4,3 +4,4 @@ dev-dist
 .wrangler
 test-results
 playwright-report
+public/third-party-licenses.txt

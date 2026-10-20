@@ -50,7 +50,9 @@ test('a backup restores notes, notebooks and images in another browser', async (
   expect(JSON.parse(text).records.map(r => r.kind).sort()).toEqual(['attachment', 'note', 'note', 'notebook', 'notebook']);
 
   // another device: its own empty マイノート, its own Tech
-  const other = await (await browser.newContext()).newPage();
+  const ctx = await browser.newContext();
+  await ctx.addInitScript(() => localStorage.setItem('techo.welcomed', 'true'));
+  const other = await ctx.newPage();
   other.on('dialog', d => d.accept('Tech'));
   await other.goto('/');
   await other.click('#addNotebookBtn');

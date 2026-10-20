@@ -105,6 +105,7 @@ const EN = {
   '閉じる': 'Close',
   '戻る': 'Back',
   '言語': 'Language',
+  'このアプリについて': 'About techo',
 
   // ---------- notes, lists, pages ----------
   '無題': 'Untitled',
@@ -300,6 +301,39 @@ const EN = {
   'フォレスト': 'Forest',
   'インディゴ': 'Indigo',
 };
+
+// The note made on the very first start (main.js welcome()).
+const WELCOME = {
+  ja: {
+    title: 'techoへようこそ',
+    html: '<p>techo はブラウザの中で動くメモ帳です。メモはこのブラウザの中にだけ保存され、どこにも送られません。</p>'
+      + '<h2>はじめに</h2><ul>'
+      + '<li><p>「新規作成」でノートを作る</p></li>'
+      + '<li><p>画像は貼り付けかドラッグ、YouTube は URL を貼るだけ</p></li>'
+      + '<li><p>「プレビュー」で大きな文字の読み取り専用画面(画面が消えません)</p></li>'
+      + '<li><p>サイドバーの下の「書き出し」でときどきバックアップ</p></li>'
+      + '</ul><h2>ほかに</h2><ul>'
+      + '<li><p>Evernote からは .enex を「読み込み」で</p></li>'
+      + '<li><p>iPhone / iPad は Safari の共有 →「ホーム画面に追加」から使ってください</p></li>'
+      + '<li><p>詳しくはホーム画面のいちばん下の「このアプリについて」へ</p></li>'
+      + '</ul><p>このノートは消してかまいません。</p>',
+  },
+  en: {
+    title: 'Welcome to techo',
+    html: '<p>techo is a notebook that runs in your browser. Your notes are stored only in this browser and are never sent anywhere.</p>'
+      + '<h2>Getting started</h2><ul>'
+      + '<li><p>Make a note with "New"</p></li>'
+      + '<li><p>Paste or drop images; paste a YouTube link to embed the video</p></li>'
+      + '<li><p>"Preview" shows the note in big, read-only text and keeps the screen on</p></li>'
+      + '<li><p>Now and then, back up with "Export" at the bottom of the sidebar</p></li>'
+      + '</ul><h2>Also</h2><ul>'
+      + '<li><p>Coming from Evernote? "Import" your .enex files</p></li>'
+      + '<li><p>On iPhone / iPad, use techo from Safari’s Share → "Add to Home Screen"</p></li>'
+      + '<li><p>More under "About techo" at the bottom of the home screen</p></li>'
+      + '</ul><p>Feel free to delete this note.</p>',
+  },
+};
+export const welcomeNote = () => WELCOME[LANG];
 
 export function t(key, vars = {}) {
   let s = LANG === 'en' ? EN[key] : undefined;
