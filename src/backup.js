@@ -90,7 +90,7 @@ async function writeBackup(filename, collect, onProgress = () => {}) {
       await flush();
       if (++done % 20 === 0) onProgress(done / total);
     };
-    buf = `{"app":"techo","version":2,"exportedAt":${Date.now()},"records":[\n`;
+    buf = `{"app":"techo","version":${BACKUP_VERSION},"exportedAt":${Date.now()},"records":[\n`;
     for (const nb of notebooks) await record('notebook', nb);
     for (const id of attachmentIds) {
       const a = await getAttachment(id);
@@ -141,6 +141,14 @@ li[data-due]::after{content:' (' attr(data-due) ')';color:#888;font-size:.85em}i
 [data-indent="1"]{margin-left:2em}[data-indent="2"]{margin-left:4em}[data-indent="3"]{margin-left:6em}[data-indent="4"]{margin-left:8em}[data-indent="5"]{margin-left:10em}[data-indent="6"]{margin-left:12em}[data-indent="7"]{margin-left:14em}[data-indent="8"]{margin-left:16em}</style>
 </head><body>${body}</body></html>`;
   download(new Blob([html], { type: 'text/html' }), `${safeName(name)}.html`);
+}
+
+// Backup file format: 1 = one JSON document (up to v0.14.1), 2 = one record per line.
+// A file from a newer techo may hold things this version would misread or drop, so it is
+// refused before anything is written, with a hint to update.
+const BACKUP_VERSION = 2;
+function checkVersion(version) {
+  if (Number(version) > BACKUP_VERSION) throw new Error(tr('新しい版のtechoで書き出されたファイルです。techoを最新にしてから読み込んでください'));
 }
 
 // Calls onLine for each line of the file without ever holding the whole file as one string.
@@ -198,9 +206,10 @@ export async function importFile(file, onProgress = () => {}) {
   await eachLine(file, async line => {
     read += line.length + 1;
     if (lineMode === null) {
-      lineMode = /^\{"app":"techo","version":2,/.test(line);
-      if (!lineMode) return false;
-      return true;
+      const version = Number(line.match(/^\{"app":"techo","version":(\d+),/)?.[1] || 0);
+      checkVersion(version);
+      lineMode = version >= 2;
+      return lineMode; // false: stop reading lines, it is one JSON document
     }
     const rec = line.replace(/,$/, '');
     if (!rec.startsWith('{"kind":')) return true; // the closing ]} line
@@ -214,6 +223,7 @@ export async function importFile(file, onProgress = () => {}) {
     // Backups from v0.14.1 and earlier: one JSON document.
     const data = JSON.parse(await file.text());
     if (data.app !== 'techo') throw new Error(tr('techoのバックアップではありません'));
+    checkVersion(data.version);
     for (const nb of data.notebooks || []) await put('notebook', nb);
     for (const a of data.attachments || []) await put('attachment', a);
     for (const d of data.notes || []) await put('note', d);

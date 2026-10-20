@@ -1,9 +1,25 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import pkg from './package.json' with { type: 'json' };
 
+// The "/*" block of public/_headers (CSP etc.), so `vite preview` and the tests run under
+// the same rules as the deployed site.
+function siteHeaders() {
+  const headers = {};
+  let inAll = false;
+  for (const line of readFileSync('public/_headers', 'utf8').split(/\r?\n/)) {
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (!/^\s/.test(line)) { inAll = line.trim() === '/*'; continue; }
+    const m = inAll && line.match(/^\s+([\w-]+):\s*(.*)$/);
+    if (m) headers[m[1]] = m[2].trim();
+  }
+  return headers;
+}
+
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  preview: { headers: siteHeaders() },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

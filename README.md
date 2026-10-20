@@ -117,3 +117,24 @@ npm run preview  # ビルド結果の確認
 - 仕組み: `src/i18n.js` の `t('日本語の文言', {値})`。日本語の文言そのものがキーで、英語の辞書を引く。index.html は起動時に置き換える。英語がない文言は日本語のまま出る
 - 既定のノートブック「マイノート」と「My Notes」は同じものとして扱う(読み込み時にまとめる)
 - Evernoteの .enex を見分けるための日本語(「サポートされていないコンテンツです」)は翻訳しない
+
+## テスト(v0.17.1)
+
+```
+npm test          # ビルドしてから全テスト(1分ほど)
+npm run test:quick  # 450MBの書き出しテストを除く
+```
+
+- Playwright。手元ではインストール済みのChromeで動く。Chromeがない環境では `npx playwright install chromium` のあと `PW_BUNDLED=1 npm test`
+- `vite preview` は `public/_headers` と同じセキュリティヘッダー(CSP)を返すので、テストは本番と同じ制限の下で動く
+- テストごとにまっさらなブラウザ(空のIndexedDB)。`tests/helpers.js` の `seed()` でデータを直接入れてから始められる
+- 試験用ファイルは `tests/fixtures/`(作り直すときは `node tests/fixtures/make-fixtures.mjs`)
+- GitHubにpushすると Actions で全テストが走る(`.github/workflows/test.yml`)
+
+## データの形式を変えるとき
+
+1. `src/db.js` の `UPGRADES` に次の番号の手順を1つ足す(出荷済みの手順は書き換えない)。ブラウザに残っている版から順に全部の手順が1回のトランザクションで走り、途中で失敗すると元のまま残る
+2. `tests/migration.spec.js` に「1つ前の版で作ったデータを開くテスト」を足す
+3. バックアップファイルの形式を変えるなら `src/backup.js` の `BACKUP_VERSION` を上げ、古い形式も読めるようにしておく
+
+古いtechoが新しい版のデータを開いたとき(キャッシュに残った古い版など)は、何も書き込まずに「再読み込み」を案内する。新しい版で書き出したバックアップを古い版で読み込もうとしたときも、書き込む前に断る。

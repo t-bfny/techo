@@ -1,12 +1,14 @@
 {
   "name": "techo",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "Evernote代替の自作メモPWA",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "test": "vite build && playwright test",
+    "test:quick": "vite build && playwright test --grep-invert \"bigger than\""
   },
   "keywords": [],
   "author": "",
@@ -31,6 +33,7 @@
     "spark-md5": "^3.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "vite": "^8.3.1",
     "vite-plugin-pwa": "^1.3.0",
     "wrangler": "^4.144.0"

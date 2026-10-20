@@ -2,7 +2,7 @@
 // ENML is XHTML with a few Evernote-only tags; we rewrite it into HTML Tiptap understands.
 import { t as tr } from './i18n.js';
 import SparkMD5 from 'spark-md5';
-import { isValidYoutubeUrl } from '@tiptap/extension-youtube';
+import { isValidYoutubeUrl, getEmbedUrlFromYoutubeUrl } from '@tiptap/extension-youtube';
 import { uid, getAllNotes, putNote, getAllNotebooks, putNotebook, deleteAttachment } from './db.js';
 import { storeBlob } from './attachments.js';
 import { sanitizeHtml } from './sanitize.js';
@@ -42,7 +42,9 @@ function youtubeEmbed(doc, url) {
   const wrap = doc.createElement('div');
   wrap.setAttribute('data-youtube-video', '');
   const iframe = doc.createElement('iframe');
-  iframe.setAttribute('src', url);
+  // The player URL, the same one the editor makes; a watch?v= link would be dropped by
+  // sanitizeHtml, which only lets YouTube embeds through.
+  iframe.setAttribute('src', getEmbedUrlFromYoutubeUrl({ url, nocookie: true, controls: true, allowFullscreen: true }) || url);
   wrap.append(iframe);
   return wrap;
 }

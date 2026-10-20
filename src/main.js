@@ -1,6 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
 import { Editor } from '@tiptap/core';
-import { EditorState } from '@tiptap/pm/state';
+import { EditorState, Selection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Youtube, { isValidYoutubeUrl } from '@tiptap/extension-youtube';
@@ -1550,7 +1550,14 @@ $('titleInput').oninput = () => {
   if (SOLO) document.title = $('titleInput').value || tr('無題');
 };
 $('titleInput').onkeydown = e => {
-  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); editor.commands.focus('start'); }
+  if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    // Right now, not on the next frame (editor.commands.focus waits one): a fast typist's
+    // next keys would otherwise still land in the title.
+    const { state, view } = editor;
+    view.dispatch(state.tr.setSelection(Selection.atStart(state.doc)));
+    view.focus();
+  }
 };
 $('backBtn').onclick = () => { go('list'); };
 
@@ -1868,10 +1875,26 @@ applyTheme();
 // quietly running until every tab is closed.
 registerSW({ immediate: true });
 
+// The data can't be opened: most often a newer techo already upgraded it and this tab runs
+// an older cached copy. Nothing is written in that state; reloading picks up the new version.
+function showOpenFailure(err) {
+  showNotice('error', err?.name === 'VersionError'
+    ? tr('データが新しい版のtechoで更新されています。再読み込みすると新しい版に切り替わります。')
+    : tr('データを開けませんでした({name})。再読み込みしてください。', { name: err?.name || tr('エラー') }),
+  [[tr('再読み込み'), () => location.reload()]]);
+}
+window.addEventListener('techo:db-blocked', () => showNotice('tab',
+  tr('古い版のtechoが別のタブで開いています。そのタブを閉じると、こちらが続きを始めます。')));
+
 (async () => {
   requestPersist();
   $('appVersion').textContent = `v${__APP_VERSION__}`;
-  await loadNotes();
+  try {
+    await loadNotes();
+  } catch (err) {
+    showOpenFailure(err);
+    return;
+  }
   await purge(trashed.filter(n => n.deletedAt < Date.now() - TRASH_DAYS * DAY));
   notebooks = await getAllNotebooks();
   await ensureNotebooks();

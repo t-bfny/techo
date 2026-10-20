@@ -265,6 +265,14 @@ const EN = {
   '保存できませんでした({name})。「もう一度保存」を試し、だめなら書き出しでバックアップを取ってください。':
     'Couldn\'t save ({name}). Try "Save again"; if that fails, export a backup.',
   'もう一度保存': 'Save again',
+  'データが新しい版のtechoで更新されています。再読み込みすると新しい版に切り替わります。':
+    'Your data was updated by a newer version of techo. Reload to switch to it.',
+  'データを開けませんでした({name})。再読み込みしてください。': "Couldn't open your data ({name}). Please reload.",
+  '再読み込み': 'Reload',
+  '古い版のtechoが別のタブで開いています。そのタブを閉じると、こちらが続きを始めます。':
+    'An older version of techo is open in another tab. Close that tab and this one will continue.',
+  '新しい版のtechoで書き出されたファイルです。techoを最新にしてから読み込んでください':
+    'This file was exported by a newer version of techo. Update techo, then import it.',
   '端末の保存容量が残りわずかです({pct}%使用)。このままだと保存に失敗することがあります。':
     'This device is almost out of storage ({pct}% used). Saving may start to fail.',
   'ゴミ箱を開く': 'Open trash',

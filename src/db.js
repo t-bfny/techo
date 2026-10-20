@@ -1,37 +1,53 @@
 // IndexedDB wrapper.
-// notes: {id, title, html, text, notebookId, pinned, createdAt, updatedAt}
-// notebooks: {id, name, createdAt}
-// attachments: {id, blob, type, createdAt}  (html references them as att:ID)
+// notes: {id, title, html, text, notebookId, pinned, pinTop, template, deletedAt, sourceKey,
+//         savedBy, createdAt, updatedAt}   (fields added later are optional: old records lack them)
+// notebooks: {id, name, pinned, numbered, createdAt}
+// attachments: {id, blob, type, name, createdAt}  (html references them as att:ID)
 
 import { t as tr } from './i18n.js';
 
 const DB_NAME = 'techo';
-const DB_VERSION = 2;
+
+// ---------- changing the stored shape ----------
+// Each change gets the next number and one step below; never edit a step that has shipped.
+// The browser runs every step between the version it has and DB_VERSION, in order, inside
+// one upgrade transaction: if a step throws, the whole upgrade rolls back and the old data
+// stays as it was. A step may add/remove stores and indexes, or rewrite records through
+// tx.objectStore(...).openCursor(). Add a test in tests/migration.spec.js that opens data
+// made at the previous version. (Notes without a notebook are fixed after loading, by
+// ensureNotebooks in main.js, so steps don't need to know the default notebook.)
+const UPGRADES = {
+  // v0.1: notes and their attachments
+  1: db => {
+    db.createObjectStore('notes', { keyPath: 'id' }).createIndex('updatedAt', 'updatedAt');
+    db.createObjectStore('attachments', { keyPath: 'id' });
+  },
+  // v0.4: notebooks
+  2: db => {
+    db.createObjectStore('notebooks', { keyPath: 'id' });
+  },
+};
+export const DB_VERSION = Math.max(...Object.keys(UPGRADES).map(Number));
+
 let dbPromise;
 
 function open() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('notes')) {
-        db.createObjectStore('notes', { keyPath: 'id' }).createIndex('updatedAt', 'updatedAt');
-      }
-      if (!db.objectStoreNames.contains('attachments')) {
-        db.createObjectStore('attachments', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('notebooks')) {
-        db.createObjectStore('notebooks', { keyPath: 'id' });
-      }
+    req.onupgradeneeded = e => {
+      for (let v = e.oldVersion + 1; v <= DB_VERSION; v++) UPGRADES[v](req.result, req.transaction);
     };
+    // Another tab still runs an older techo and holds the database open.
+    req.onblocked = () => window.dispatchEvent(new CustomEvent('techo:db-blocked'));
     req.onsuccess = () => {
       const db = req.result;
       // A newer version opened in another tab wants to upgrade: step aside instead of blocking it.
       db.onversionchange = () => { db.close(); dbPromise = null; };
       resolve(db);
     };
-    req.onerror = () => reject(req.error);
+    // VersionError: the data was already upgraded by a newer techo than this (cached) one.
+    req.onerror = () => { dbPromise = null; reject(req.error); };
   });
   return dbPromise;
 }
