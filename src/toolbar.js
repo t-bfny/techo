@@ -98,6 +98,7 @@ export function setupToolbar(editor, insert) {
     if (!b) return;
     if (b.dataset.cmd) TOGGLES[b.dataset.cmd](editor);
     if (b.dataset.table) editor.chain().focus()[b.dataset.table]().run();
+    if (b.dataset.align) editor.chain().focus().updateAttributes('image', { align: b.dataset.align === 'left' ? null : b.dataset.align }).run();
     const pop = b.dataset.pop;
     if (pop === 'insert') {
       showPopover(b, p => {
@@ -167,6 +168,10 @@ export function setupToolbar(editor, insert) {
     $('colorMark').style.setProperty('--c', editor.getAttributes('textStyle').color || 'currentColor');
     $('hlMark').style.setProperty('--c', editor.getAttributes('highlight').color || 'transparent');
     $('tableTools').hidden = !editor.isActive('table');
+    const onImage = editor.isActive('image');
+    $('imageTools').hidden = !onImage;
+    const align = onImage && (editor.getAttributes('image').align || 'left');
+    for (const a of $('imageTools').querySelectorAll('[data-align]')) a.classList.toggle('on', a.dataset.align === align);
     const inTask = editor.isActive('taskItem');
     $('dueBtn').hidden = !inTask;
     const due = inTask && editor.getAttributes('taskItem').due;

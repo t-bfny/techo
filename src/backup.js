@@ -133,7 +133,7 @@ export async function exportNotesHtml(notes, titleOf, name) {
   }).join('<hr>');
   const html = `<!doctype html><html lang="${document.documentElement.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(name)}</title>
 <style>body{font-family:-apple-system,'Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;max-width:820px;margin:0 auto;padding:24px;line-height:1.75}
-img{max-width:100%;height:auto}figure{margin:16px 0}figcaption{text-align:center;color:#666;font-size:.9em;margin-top:6px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 10px}
+img{max-width:100%;height:auto}figure{margin:16px 0;width:fit-content;max-width:100%}[data-align=center]{margin-left:auto;margin-right:auto}[data-align=right]{margin-left:auto;margin-right:0}img{display:block}figcaption{text-align:center;color:#666;font-size:.9em;margin-top:6px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 10px}
 pre{background:#f3f3f3;padding:12px;overflow-x:auto}ul[data-type=taskList]{list-style:none;padding-left:4px}
 li[data-checked=true]{color:#888;text-decoration:line-through}li[data-type=taskItem]::before{content:'☐ '}li[data-checked=true]::before{content:'☑ '}
 li[data-due]::after{content:' (' attr(data-due) ')';color:#888;font-size:.85em}iframe{width:100%;aspect-ratio:16/9;border:0}hr{margin:40px 0}

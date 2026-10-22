@@ -1092,3 +1092,17 @@ html[lang="en"] .about [lang="ja"], html:not([lang="en"]) .about [lang="en"] { d
 .tiptap .img-figure:is(.has-caption, .ProseMirror-selectednode, :focus-within) .img-caption { display: block; }
 .tiptap .img-figure.ProseMirror-selectednode .img-caption, .tiptap .img-figure .img-caption:focus { border-bottom-color: var(--border-strong); }
 .tiptap .img-figure.ProseMirror-selectednode img { outline: 2px solid var(--accent); }
+
+/* ---------- image alignment (data-align on <figure> or <img>; none = left) ---------- */
+:is(.tiptap, #stageBody, #printArea) figure { width: fit-content; max-width: 100%; min-width: min(100%, 240px); }
+:is(.tiptap, #stageBody, #printArea) :is(figure, img)[data-align="center"] { margin-left: auto; margin-right: auto; }
+:is(.tiptap, #stageBody, #printArea) :is(figure, img)[data-align="right"] { margin-left: auto; margin-right: 0; }
+#printArea img[data-align] { display: block; }
+:is(.tiptap, #stageBody, #printArea) figure[data-align="center"] > img { margin-left: auto; margin-right: auto; }
+:is(.tiptap, #stageBody, #printArea) figure[data-align="right"] > img { margin-left: auto; margin-right: 0; }
+
+/* On a computer the toolbar wraps instead of hiding buttons past its right edge (the image
+   and table tools appear at the end); phones keep the single scrolling row. */
+@media (min-width: 761px) {
+  #toolbar { flex-wrap: wrap; overflow-x: visible; row-gap: 2px; }
+}

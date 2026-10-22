@@ -54,3 +54,40 @@ test('images without a caption are stored as before', async ({ page }) => {
   expect(n.html).toContain('<img src="att:img1">');
   expect(n.html).not.toContain('<figure');
 });
+
+test('align an image left, center or right; kept with and without a caption', async ({ page }) => {
+  await seed(page, {
+    notebooks: [{ id: 'nb1', name: 'マイノート', createdAt: 1 }],
+    notes: [note('a', '画像の配置', { html: '<p>前</p><img src="att:img1"><p>後</p>' })],
+    attachments: [{ id: 'img1', type: 'image/svg+xml', content: '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80"><rect width="200" height="80" fill="#456"/></svg>' }],
+  });
+  await page.goto('/#n/a');
+  await expect(page.locator('#imageTools')).toBeHidden();
+  const figure = page.locator('.tiptap figure.img-figure');
+  await figure.locator('img').click();
+  await expect(page.locator('#imageTools')).toBeVisible();
+  await expect(page.locator('#imageTools [data-align="left"]')).toHaveClass(/on/);
+
+  await page.click('#imageTools [data-align="center"]');
+  await expect(figure).toHaveAttribute('data-align', 'center');
+  await expect(page.locator('#imageTools [data-align="center"]')).toHaveClass(/on/);
+  const offset = () => figure.locator('img').evaluate(img => img.getBoundingClientRect().left - img.closest('.tiptap').getBoundingClientRect().left);
+  expect(await offset()).toBeGreaterThan(100);
+  await saved(page);
+  expect((await readStore(page, 'notes'))[0].html).toContain('<img src="att:img1" data-align="center">');
+
+  await page.click('#imageTools [data-align="right"]');
+  await figure.locator('.img-caption').click();
+  await page.keyboard.type('右の図');
+  await saved(page);
+  expect((await readStore(page, 'notes'))[0].html).toMatch(/<figure data-align="right"><img src="att:img1"><figcaption>右の図<\/figcaption><\/figure>/);
+  await page.click('#stageBtn');
+  const stageImg = page.locator('#stageBody figure[data-align="right"] img');
+  await expect(stageImg).toBeVisible();
+  await page.click('#stageExit');
+
+  await figure.locator('img').click();
+  await page.click('#imageTools [data-align="left"]');
+  await expect(figure).not.toHaveAttribute('data-align', /./);
+  expect(await offset()).toBeLessThan(5);
+});

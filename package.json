@@ -1,6 +1,6 @@
 {
   "name": "techo",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "A notebook that runs in your browser: offline, no account, notes stay on your device.",
   "scripts": {
     "dev": "vite --host",
