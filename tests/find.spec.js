@@ -17,6 +17,7 @@ const hits = page => page.locator('.tiptap .find-hit');
 
 test('Ctrl+F finds in the open note only, highlights every hit and steps through them', async ({ page }) => {
   await page.locator('.tiptap').click();
+  await page.keyboard.press('Control+Home'); // the search starts from the hit nearest the cursor
   await page.keyboard.press('Control+f');
   await expect(page.locator('#findInput')).toBeFocused();
   await page.keyboard.type('AI');
