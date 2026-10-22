@@ -2,7 +2,6 @@ import { registerSW } from 'virtual:pwa-register';
 import { Editor } from '@tiptap/core';
 import { EditorState, Selection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
-import Image from '@tiptap/extension-image';
 import Youtube, { isValidYoutubeUrl } from '@tiptap/extension-youtube';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { TextStyle, Color } from '@tiptap/extension-text-style';
@@ -23,6 +22,8 @@ import { sanitizeHtml } from './sanitize.js';
 import { t as tr, LANG, LOCALE, setLang, translatePage, notebookKey, welcomeNote } from './i18n.js';
 import { TableOfContents, fillToc } from './toc.js';
 import { Indent, KeepTab } from './indent.js';
+import { Find, findState, scrollToFind, toRegExp } from './find.js';
+import { CaptionImage } from './image.js';
 import { setupToolbar, showPopover, showMenuAt, menuSep, menuItem } from './toolbar.js';
 
 const $ = id => document.getElementById(id);
@@ -76,7 +77,7 @@ const editor = new Editor({
         isAllowedUri: (url, ctx) => url.startsWith('blob:') || ctx.defaultValidate(url),
       },
     }),
-    Image,
+    CaptionImage,
     Youtube.configure({ nocookie: true, width: 640, height: 360, addPasteHandler: false }),
     Table.configure({ resizable: false }),
     TableRow, TableHeader, TableCell,
@@ -87,6 +88,7 @@ const editor = new Editor({
     JaAutolink,
     TableOfContents,
     Indent, KeepTab,
+    Find,
   ],
   editorProps: {
     handlePaste: (_view, event) =>
@@ -987,6 +989,7 @@ async function showNote(id) {
   const { doc, plugins } = editor.state;
   editor.view.updateState(EditorState.create({ doc, plugins }));
   editorBase = { id, updatedAt: note.updatedAt };
+  if (!$('findBar').hidden) runFind(); // the fresh state forgot the search
   hideNotice('conflict');
   hideNotice('tab');
   channel?.postMessage({ type: 'who', id, from: TAB_ID }); // is this note open in another tab?
@@ -1244,6 +1247,77 @@ function exitStage() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !$('stage').hidden) lockScreenOn();
   if (document.visibilityState === 'hidden' && saveTimer) saveNow();
+});
+
+// ---------- find & replace (the open note only) ----------
+
+const findOpts = { caseSensitive: false, regex: false };
+const findQuery = () => ({ term: $('findInput').value, replace: $('replaceInput').value, ...findOpts });
+
+function updateFindCount() {
+  if ($('findBar').hidden) return;
+  const s = findState(editor);
+  const term = $('findInput').value;
+  const bad = term && findOpts.regex && !toRegExp(findQuery());
+  $('findCount').textContent = !term ? '' : bad ? tr('正規表現の書き方が正しくありません')
+    : s.matches.length ? `${s.current + 1} / ${s.matches.length}` : tr('見つかりません');
+  $('findCount').classList.toggle('find-none', !!term && !s.matches.length);
+  for (const b of ['replaceOne', 'replaceAllBtn', 'findPrev', 'findNext']) $(b).disabled = !s.matches.length;
+}
+
+function runFind() {
+  editor.commands.setFindQuery($('findInput').value ? findQuery() : null);
+  updateFindCount();
+  scrollToFind(editor.view);
+}
+
+function openFind(focusReplace = false) {
+  const { from, to } = editor.state.selection;
+  const picked = editor.state.doc.textBetween(from, to, ' ');
+  if (picked && picked.length < 200 && !picked.includes('\n')) $('findInput').value = picked;
+  $('findBar').hidden = false;
+  runFind();
+  const box = focusReplace && $('findInput').value ? $('replaceInput') : $('findInput');
+  box.focus();
+  box.select();
+}
+
+function closeFind() {
+  $('findBar').hidden = true;
+  editor.commands.setFindQuery(null);
+  editor.commands.focus();
+}
+
+const replaceAndShow = () => { editor.commands.replaceCurrent(); scrollToFind(editor.view); };
+
+$('findBtn').onclick = () => ($('findBar').hidden ? openFind(true) : closeFind());
+$('findInput').oninput = runFind;
+$('replaceInput').oninput = () => { editor.commands.setFindQuery($('findInput').value ? findQuery() : null); updateFindCount(); };
+$('findNext').onclick = () => editor.commands.findStep(1);
+$('findPrev').onclick = () => editor.commands.findStep(-1);
+$('replaceOne').onclick = replaceAndShow;
+$('replaceAllBtn').onclick = () => {
+  const n = findState(editor).matches.length;
+  if (editor.commands.replaceAll()) showToast(tr('{n}件を置換しました(本文で Ctrl+Z を押すと戻せます)', { n }), false);
+};
+$('findClose').onclick = closeFind;
+for (const [id, key] of [['findCase', 'caseSensitive'], ['findRegex', 'regex']]) {
+  $(id).onclick = () => { findOpts[key] = !findOpts[key]; $(id).classList.toggle('on', findOpts[key]); runFind(); };
+}
+$('findBar').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+  if (e.key !== 'Enter' || e.isComposing) return; // the Enter that confirms IME input is not a search
+  e.preventDefault();
+  if (e.target.id === 'replaceInput') replaceAndShow();
+  else editor.commands.findStep(e.shiftKey ? -1 : 1);
+});
+editor.on('transaction', updateFindCount);
+// Ctrl+F / Ctrl+H while a note is open (the browser's own find still works everywhere else).
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !['f', 'h'].includes(e.key.toLowerCase())) return;
+  if (view !== 'note' || $('editorWrap').hidden || !$('stage').hidden) return;
+  e.preventDefault();
+  openFind(e.key.toLowerCase() === 'h');
 });
 
 // ---------- events ----------

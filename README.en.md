@@ -12,6 +12,8 @@ A notebook that runs in your browser. No account, works offline, and your notes 
 - Notebooks, shortcuts, pin to top, tabs, separate windows, per-notebook numbering
 - Tasks: give a checklist item a due date and every task across your notes is grouped into overdue / today / tomorrow / upcoming
 - Search all notes (Ctrl+K)
+- Find and replace in the open note (Ctrl+F / Ctrl+H): replace all, match case, regular expressions (with $1)
+- Image captions
 - Preview: big, read-only text that keeps the screen on (for reading on a music stand or in a rehearsal room)
 - Templates, trash (30 days), printing, five themes, Japanese / English
 - Imports Evernote .enex files as they are (images, attachments, checklists, tables…)

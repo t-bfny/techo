@@ -1051,3 +1051,44 @@ html[lang="en"] .about [lang="ja"], html:not([lang="en"]) .about [lang="en"] { d
 .home-foot .link-plain { color: var(--text-dim); }
 #appVersion { font-size: inherit; padding: 2px 4px; }
 #appVersion:hover { color: var(--text); }
+
+/* ---------- find & replace ---------- */
+#findBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+#findBar input { flex: 1 1 120px; max-width: 260px; min-width: 0; padding: 5px 9px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--border); outline: none; }
+#findBar input:focus { border-color: var(--accent); }
+#findCount { min-width: 4.5em; margin-right: auto; font-size: 13px; font-variant-numeric: tabular-nums; }
+#findCount.find-none { color: var(--danger); }
+#findBar .find-opt { font-family: ui-monospace, Consolas, monospace; }
+#findBar .find-opt.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.tiptap .find-hit { background: color-mix(in srgb, #f5c518 35%, transparent); border-radius: 2px; }
+.tiptap .find-current { background: #f5c518; color: #111; box-shadow: 0 0 0 1px #f5c518; }
+
+/* ---------- image captions ---------- */
+:is(.tiptap, #stageBody, #printArea) figure { margin: 8px 0 14px; }
+:is(.tiptap, #stageBody, #printArea) figure img { margin-bottom: 4px; }
+:is(#stageBody, #printArea) figcaption { text-align: center; color: var(--text-dim); font-size: 0.88em; }
+#printArea figcaption { color: #666; }
+.tiptap .img-figure .img-caption {
+  display: none;
+  width: 100%;
+  text-align: center;
+  font: inherit;
+  font-size: 0.88em;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  outline: none;
+  padding: 2px 0;
+}
+.tiptap .img-figure:is(.has-caption, .ProseMirror-selectednode, :focus-within) .img-caption { display: block; }
+.tiptap .img-figure.ProseMirror-selectednode .img-caption, .tiptap .img-figure .img-caption:focus { border-bottom-color: var(--border-strong); }
+.tiptap .img-figure.ProseMirror-selectednode img { outline: 2px solid var(--accent); }

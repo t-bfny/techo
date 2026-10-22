@@ -204,6 +204,7 @@
           <h2>キーボード</h2>
           <table class="about-keys">
             <tr><td>Ctrl+K</td><td>すべてのノートを検索</td></tr>
+            <tr><td>Ctrl+F / Ctrl+H</td><td>開いているノートの中を検索 / 置換</td></tr>
             <tr><td>Ctrl+P</td><td>開いているノート(選んだノート)を印刷</td></tr>
             <tr><td>Ctrl+Z</td><td>削除・移動などを取り消す(本文の外で)</td></tr>
             <tr><td>Tab / Shift+Tab</td><td>インデント</td></tr>
@@ -242,6 +243,7 @@
           <h2>Keyboard</h2>
           <table class="about-keys">
             <tr><td>Ctrl+K</td><td>Search all notes</td></tr>
+            <tr><td>Ctrl+F / Ctrl+H</td><td>Find / replace in the open note</td></tr>
             <tr><td>Ctrl+P</td><td>Print the open (or selected) notes</td></tr>
             <tr><td>Ctrl+Z</td><td>Undo a delete, move, etc. (outside the text)</td></tr>
             <tr><td>Tab / Shift+Tab</td><td>Indent</td></tr>
@@ -312,6 +314,8 @@
           <button data-cmd="orderedList" title="番号付き">1. 番号</button>
           <button data-cmd="taskList" title="チェックリスト">☐ チェック</button>
           <button id="dueBtn" data-pop="due" title="このタスクの期限" hidden>期限</button>
+          <span class="vr"></span>
+          <button id="findBtn" title="検索と置換 (Ctrl+F / Ctrl+H)">置換</button>
           <span id="tableTools" hidden>
             <span class="vr"></span>
             <button data-table="addRowAfter">行+</button>
@@ -319,6 +323,18 @@
             <button data-table="deleteRow">行-</button>
             <button data-table="deleteColumn">列-</button>
           </span>
+        </div>
+        <div id="findBar" hidden>
+          <input id="findInput" placeholder="検索" autocomplete="off" spellcheck="false">
+          <input id="replaceInput" placeholder="置換後" autocomplete="off" spellcheck="false">
+          <span id="findCount" class="dim"></span>
+          <button id="findPrev" class="mini" title="前へ (Shift+Enter)">↑</button>
+          <button id="findNext" class="mini" title="次へ (Enter)">↓</button>
+          <button id="replaceOne" class="mini" title="置換して次へ (置換後の欄で Enter)">置換</button>
+          <button id="replaceAllBtn" class="mini">すべて置換</button>
+          <button id="findCase" class="mini find-opt" title="大文字と小文字を区別">Aa</button>
+          <button id="findRegex" class="mini find-opt" title="正規表現">.*</button>
+          <button id="findClose" class="mini" title="閉じる (Esc)">×</button>
         </div>
         <div class="scroll" id="editorScroll">
           <div class="title-row"><span id="noteNumber"></span><input id="titleInput" placeholder="タイトル" autocomplete="off"></div>
