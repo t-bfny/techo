@@ -849,6 +849,14 @@ function renderBulkBar() {
   $('bulkPin').textContent = tr(allPinned ? 'ショートカットから外す' : 'ショートカットに追加');
 }
 
+// Checklist progress for the note list (done / all), like Evernote. Read straight from the
+// saved HTML: every task item carries data-checked.
+const CHECK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.2 8.3l1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function taskProgress(html) {
+  const all = (html || '').match(/data-checked="(true|false)"/g);
+  return all ? { done: all.filter(a => a.includes('true')).length, total: all.length } : null;
+}
+
 function renderList() {
   const terms = searchTerms($('search').value);
   const scoped = notes.filter(inFilter);
@@ -883,6 +891,15 @@ function renderList() {
     li.innerHTML = `<div class="row"><span class="t"></span>${n.pinTop ? PIN_ICON : ''}<span class="d"></span></div><div class="s"></div><div class="nb"></div>`;
     li.querySelector('.t').textContent = displayTitle(n);
     li.querySelector('.d').textContent = fmtDate(n.updatedAt);
+    const progress = taskProgress(n.html);
+    if (progress) {
+      const tc = document.createElement('span');
+      tc.className = 'tc' + (progress.done === progress.total ? ' all-done' : '');
+      tc.title = tr('チェック項目 {done} / {total} 完了', progress);
+      tc.innerHTML = CHECK_ICON;
+      tc.append(`${progress.done}/${progress.total}`);
+      li.querySelector('.d').before(tc);
+    }
     if (terms.length) {
       li.querySelector('.t').replaceChildren();
       appendMarked(li.querySelector('.t'), displayTitle(n), terms);

@@ -197,3 +197,25 @@ test('shortcuts: a note and a notebook show up in the sidebar', async ({ page })
   await expect(page.locator('#shortcutList')).toContainText('マイノート');
   await saved(page);
 });
+
+test('the note list shows checklist progress, and it follows checking items off', async ({ page }) => {
+  const task = (text, done) => `<li data-type="taskItem" data-checked="${done}"><p>${text}</p></li>`;
+  await seed(page, {
+    notebooks: [{ id: 'nb1', name: 'マイノート', createdAt: 1 }],
+    notes: [
+      note('t', 'SNS投稿の仕事', { html: `<ul data-type="taskList">${task('下書き', true)}${task('画像', true)}${task('予約', false)}</ul>`, updatedAt: 3000 }),
+      note('p', 'ただのメモ', { updatedAt: 2000 }),
+    ],
+  });
+  await page.goto('/#list');
+  const row = title => page.locator('#noteList li', { hasText: title });
+  await expect(row('SNS投稿の仕事').locator('.tc')).toHaveText('2/3');
+  await expect(row('SNS投稿の仕事').locator('.tc')).not.toHaveClass(/all-done/);
+  await expect(row('ただのメモ').locator('.tc')).toHaveCount(0);
+
+  await row('SNS投稿の仕事').click();
+  await page.locator('.tiptap li[data-checked="false"] input').click();
+  await saved(page);
+  await expect(row('SNS投稿の仕事').locator('.tc')).toHaveText('3/3');
+  await expect(row('SNS投稿の仕事').locator('.tc')).toHaveClass(/all-done/);
+});

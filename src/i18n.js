@@ -107,6 +107,7 @@ const EN = {
   '言語': 'Language',
   'このアプリについて': 'About techo',
   '置換': 'Replace',
+  'チェック項目 {done} / {total} 完了': '{done} of {total} checklist items done',
   '画像の見出し(キャプション)': 'Image caption',
   '左揃え': 'Align left',
   '中央揃え': 'Center',

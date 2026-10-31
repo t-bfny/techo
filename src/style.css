@@ -1106,3 +1106,8 @@ html[lang="en"] .about [lang="ja"], html:not([lang="en"]) .about [lang="en"] { d
 @media (min-width: 761px) {
   #toolbar { flex-wrap: wrap; overflow-x: visible; row-gap: 2px; }
 }
+
+/* checklist progress in the note list: ◯ 4/8 */
+#noteList .tc { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; align-self: center; }
+#noteList .tc svg { width: 13px; height: 13px; }
+#noteList .tc.all-done { color: var(--accent); }
