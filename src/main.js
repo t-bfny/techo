@@ -1967,6 +1967,35 @@ $('themeBtn').onclick = e => {
     return item;
   })));
 };
+// ---------- font ----------
+// The whole app follows it (notes, lists, menus, print). Each choice is shown in its own font.
+
+const TYPEFACE_KEY = 'techo.font';
+const FONTS = [
+  ['system', tr('標準'), 'var(--font-system)'],
+  ['meiryo', tr('メイリオ'), 'var(--font-meiryo)'],
+  ['wikipedia', 'Wikipedia', 'var(--font-wikipedia)'],
+];
+
+function applyFont(font) {
+  if (font === 'system') delete document.documentElement.dataset.font;
+  else if (font) document.documentElement.dataset.font = font;
+  const cur = document.documentElement.dataset.font || 'system';
+  $('fontBtn').textContent = tr('フォント: {label}', { label: FONTS.find(([v]) => v === cur)[1] });
+}
+
+$('fontBtn').onclick = e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const cur = document.documentElement.dataset.font || 'system';
+  showMenuAt(r.left, r.bottom + 6, p => p.append(...FONTS.map(([value, label, stack]) => {
+    const item = menuItem(label, () => { store(TYPEFACE_KEY, value); applyFont(value); });
+    item.style.fontFamily = stack;
+    if (value === cur) item.classList.add('current');
+    return item;
+  })));
+};
+applyFont();
+
 // Language: the button names the other language; switching reloads into it.
 $('langBtn').textContent = LANG === 'ja' ? 'English' : '日本語';
 $('langBtn').onclick = async () => {

@@ -35,6 +35,11 @@
   --danger: #f08a8a;
   --radius: 10px;
   --font: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  --font-system: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  --font-meiryo: 'Meiryo', 'メイリオ', sans-serif;
+  /* What Wikipedia asks for: the browser's own sans-serif (Windows: Arial + Meiryo,
+     Mac / iPhone: Helvetica + Hiragino), so techo looks like Wikipedia on each device. */
+  --font-wikipedia: sans-serif;
   --stage-size: 22px;
   color-scheme: dark;
 }
@@ -1111,3 +1116,7 @@ html[lang="en"] .about [lang="ja"], html:not([lang="en"]) .about [lang="en"] { d
 #noteList .tc { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; align-self: center; }
 #noteList .tc svg { width: 13px; height: 13px; }
 #noteList .tc.all-done { color: var(--accent); }
+
+/* ---------- font (home screen; applied before first paint by theme-init.js) ---------- */
+:root[data-font="meiryo"] { --font: var(--font-meiryo); }
+:root[data-font="wikipedia"] { --font: var(--font-wikipedia); }

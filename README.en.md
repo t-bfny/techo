@@ -15,7 +15,7 @@ A notebook that runs in your browser. No account, works offline, and your notes 
 - Find and replace in the open note (Ctrl+F / Ctrl+H): replace all, match case, regular expressions (with $1)
 - Image captions
 - Preview: big, read-only text that keeps the screen on
-- Templates, trash (30 days), printing, five themes, Japanese / English
+- Templates, trash (30 days), printing, five themes, fonts (default / Meiryo / Wikipedia), Japanese / English
 - Imports Evernote .enex files as they are (images, attachments, checklists, tables…)
 - Works on computers, phones and tablets; add it to your home screen and it behaves like an app
 
