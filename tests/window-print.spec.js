@@ -30,7 +30,9 @@ test('print: Ctrl+P prints the open note, the menu prints several; video becomes
   await importFiles(page, ['sample.enex']);
   await page.evaluate(() => { window.__prints = 0; window.print = () => { window.__prints++; }; });
   await page.click('#noteList li:has-text("全部入り")');
-  await page.locator('.tiptap').click();
+  // the first paragraph, not the middle of the note: that can be the YouTube player, and
+  // keys typed inside its frame never reach techo
+  await page.locator('.tiptap p').first().click();
   await page.keyboard.press('Control+p');
   await expect.poll(() => page.evaluate(() => window.__prints)).toBe(1);
   await expect(page.locator('#printArea article')).toHaveCount(1);
@@ -40,5 +42,6 @@ test('print: Ctrl+P prints the open note, the menu prints several; video becomes
   await page.click('#noteList li:has-text("二件目")', { modifiers: ['Shift'] });
   await page.click('#noteList li:has-text("二件目")', { button: 'right' });
   await page.click('#popover .menu-item:has-text("2件を印刷")');
+  await expect(page.locator('#printArea article')).toHaveCount(2); // printing is async: wait for both
   expect((await page.locator('#printArea article h1').allTextContents()).sort()).toEqual(['二件目', '全部入り'].sort());
 });
