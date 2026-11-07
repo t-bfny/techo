@@ -111,6 +111,8 @@ const EN = {
   '文字のフォント': 'Font',
   '標準': 'Default',
   'メイリオ': 'Meiryo',
+  'ブラウザ標準({name})': 'Browser default ({name})',
+  'ブラウザ標準のゴシック体': 'Browser default sans-serif',
   'チェック項目 {done} / {total} 完了': '{done} of {total} checklist items done',
   '画像の見出し(キャプション)': 'Image caption',
   '左揃え': 'Align left',

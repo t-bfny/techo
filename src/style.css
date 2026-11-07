@@ -37,9 +37,9 @@
   --font: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
   --font-system: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
   --font-meiryo: 'Meiryo', 'メイリオ', sans-serif;
-  /* What Wikipedia asks for: the browser's own sans-serif (Windows: Arial + Meiryo,
-     Mac / iPhone: Helvetica + Hiragino), so techo looks like Wikipedia on each device. */
-  --font-wikipedia: sans-serif;
+  /* The browser's own sans-serif: whatever the browser settings (or the device) use for
+     Japanese gothic text. The font menu names it after measuring (main.js browserSansName). */
+  --font-browser: sans-serif;
   --stage-size: 22px;
   color-scheme: dark;
 }
@@ -1119,4 +1119,4 @@ html[lang="en"] .about [lang="ja"], html:not([lang="en"]) .about [lang="en"] { d
 
 /* ---------- font (home screen; applied before first paint by theme-init.js) ---------- */
 :root[data-font="meiryo"] { --font: var(--font-meiryo); }
-:root[data-font="wikipedia"] { --font: var(--font-wikipedia); }
+:root[data-font="browser"] { --font: var(--font-browser); }

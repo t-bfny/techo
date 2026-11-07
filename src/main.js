@@ -1971,24 +1971,61 @@ $('themeBtn').onclick = e => {
 // The whole app follows it (notes, lists, menus, print). Each choice is shown in its own font.
 
 const TYPEFACE_KEY = 'techo.font';
+
+// Which font the browser's own sans-serif really is here. It differs by device and by the
+// browser's font settings, and no API says, so: the same text is measured in sans-serif and
+// in each candidate; the candidate that is installed (differs from monospace) and measures
+// exactly the same is the one. Japanese and Latin both, so near-twins don't pass.
+let browserSans;
+function browserSansName() {
+  if (browserSans !== undefined) return browserSans;
+  const probe = document.createElement('span');
+  probe.textContent = '永あア漢字の幅を測る Wwmil 0123456789';
+  probe.style.cssText = 'position:absolute;left:-9999px;top:0;font-size:40px;white-space:nowrap;visibility:hidden';
+  document.body.append(probe);
+  const width = family => { probe.style.fontFamily = family; return probe.getBoundingClientRect().width; };
+  const target = width('sans-serif');
+  const mono = width('monospace');
+  const CANDIDATES = [
+    ['Meiryo', 'メイリオ'], ['Yu Gothic UI', 'Yu Gothic UI'], ['Yu Gothic', '游ゴシック'],
+    ['BIZ UDPGothic', 'BIZ UDPゴシック'], ['BIZ UDGothic', 'BIZ UDゴシック'],
+    ['MS PGothic', 'MS Pゴシック'], ['MS UI Gothic', 'MS UI Gothic'], ['MS Gothic', 'MS ゴシック'],
+    ['Hiragino Sans', 'ヒラギノ角ゴシック'], ['Hiragino Kaku Gothic ProN', 'ヒラギノ角ゴ ProN'],
+    ['Noto Sans JP', 'Noto Sans JP'], ['Noto Sans CJK JP', 'Noto Sans CJK JP'],
+    ['Source Han Sans JP', '源ノ角ゴシック'], ['IPAexGothic', 'IPAexゴシック'],
+  ];
+  browserSans = null;
+  for (const [family, label] of CANDIDATES) {
+    const w = width(`"${family}", monospace`);
+    if (Math.abs(w - mono) > 0.5 && Math.abs(w - target) < 0.5) { browserSans = label; break; }
+  }
+  probe.remove();
+  return browserSans;
+}
+
+const browserFontLabel = () => (browserSansName()
+  ? tr('ブラウザ標準({name})', { name: browserSansName() }) : tr('ブラウザ標準のゴシック体'));
+
 const FONTS = [
   ['system', tr('標準'), 'var(--font-system)'],
   ['meiryo', tr('メイリオ'), 'var(--font-meiryo)'],
-  ['wikipedia', 'Wikipedia', 'var(--font-wikipedia)'],
+  ['browser', null, 'var(--font-browser)'], // label measured when shown
 ];
+const fontLabel = ([value, label]) => (value === 'browser' ? browserFontLabel() : label);
 
 function applyFont(font) {
   if (font === 'system') delete document.documentElement.dataset.font;
   else if (font) document.documentElement.dataset.font = font;
   const cur = document.documentElement.dataset.font || 'system';
-  $('fontBtn').textContent = tr('フォント: {label}', { label: FONTS.find(([v]) => v === cur)[1] });
+  $('fontBtn').textContent = tr('フォント: {label}', { label: fontLabel(FONTS.find(([v]) => v === cur) || FONTS[0]) });
 }
 
 $('fontBtn').onclick = e => {
   const r = e.currentTarget.getBoundingClientRect();
   const cur = document.documentElement.dataset.font || 'system';
-  showMenuAt(r.left, r.bottom + 6, p => p.append(...FONTS.map(([value, label, stack]) => {
-    const item = menuItem(label, () => { store(TYPEFACE_KEY, value); applyFont(value); });
+  showMenuAt(r.left, r.bottom + 6, p => p.append(...FONTS.map(font => {
+    const [value, , stack] = font;
+    const item = menuItem(fontLabel(font), () => { store(TYPEFACE_KEY, value); applyFont(value); });
     item.style.fontFamily = stack;
     if (value === cur) item.classList.add('current');
     return item;
